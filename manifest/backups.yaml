@@ -5,6 +5,7 @@
 schema_version: 1
 
 sources:
+  - path: "~/.hermes_setup"          # the public tool repo (re-cloneable, but cheap)
   - path: "~/.claude"                # Claude Code config, skills, keybindings, auto-memory
     excludes:                        # the same ephemerals the manifest excludes
       - "**/projects"
@@ -20,10 +21,7 @@ sources:
       - "**/backups"
       - "**/file-history"
       - "**/shell-snapshots"
-  - path: "~/.mempalace"             # external memory (drawers, KG, embeddings)
-    excludes:
-      - "**/palace.backup"           # redundant in-place copy MemPalace keeps itself
-  - path: "~/.ssh"                   # SSH keys — tiny, irreplaceable (repo is encrypted)
+  - path: "~/Documents"
   # - path: "${BACKUP_SECRETS_PATH}"   # uncomment to back up your secret vault
 
 # Universal excludes (node_modules, __pycache__, .DS_Store, .git/objects, …)
@@ -32,7 +30,7 @@ excludes: []
 
 destination:
   kind: local                        # local | external_disk | rclone:<remote>
-  path: "~/backups"                  # local restic repo (start here; switch to disk/cloud later)
+  path: "/Volumes/HermesBackup/restic"   # CHANGE ME (external disk or local dir)
   # For cloud, e.g.:
   #   kind: "rclone:b2_personal"
   #   repo: "hermes-backups"
