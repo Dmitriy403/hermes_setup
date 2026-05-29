@@ -272,7 +272,7 @@ Alternatives considered:
 
 ### Decision 20: Two-repo architecture — public tool, private config
 
-`hermes_setup` is a **public** repo on gitcode. The captured personal manifest (CLAUDE.md, settings.json, the user's authored skills) contains no credentials, but it does expose the user's macOS username, project names, and private workflow. The decision (2026-05-28) is to keep two repos:
+`hermes_setup` is a **public** repo on GitHub (github.com/Dmitriy403/hermes_setup). The captured personal manifest (CLAUDE.md, settings.json, the user's authored skills) contains no credentials, but it does expose the user's macOS username, project names, and private workflow. The decision (2026-05-28) is to keep two repos:
 
 - **`hermes_setup` (public)** — the reusable TOOL: the `hermes` CLI, the four-layer security framework, the bundled plugins (`vision`, `macos-control`), the probe binary, `install.sh`, and a `manifest/` holding only **factory defaults** (the starter `permissions.yaml`, `probe-tcc.yaml`, and the bundled-plugin entries `skills/vision/` + `mcp/macos-control.yaml`). Nothing personal.
 - **`hermes_config` (private)** — the user's captured manifest: their `CLAUDE.md`, `settings.json`, personal skills (`gitcode-pr-*`, `review-*`), `plugins.yaml`, `mcp/`, `commands/`, `hooks/`, and a gitignored `secrets.env`. This is the real backup/portability artifact.
@@ -299,7 +299,7 @@ Consequence for §12: "seed the real manifest" now means `hermes capture --manif
 
 ## Open Questions
 
-1. **Repo host** — GitHub vs. gitcode? The user already uses gitcode for some projects; bootstrap URL needs to be picked before `install.sh` can be written. **Resolved (2026-05-27): gitcode** — the user's primary forge (per their cross-project conventions). The `install.sh` bootstrap URL is parameterized (Decision 7), so this can be re-pointed cheaply if it changes before the bootstrap task lands.
+1. **Repo host** — GitHub vs. gitcode? The user already uses gitcode for some projects; bootstrap URL needs to be picked before `install.sh` can be written. **Resolved (2026-05-29): GitHub** — both repos live on GitHub under `Dmitriy403` (`hermes_setup` public, `hermes_config` private). Earlier notes said gitcode; the user chose GitHub when creating the repos. The `install.sh` bootstrap URL is parameterized (Decision 7), so the host is a one-line swap.
 2. **MCP registration mechanism** — `claude mcp add` CLI vs. direct settings.json edits. Needs a quick spike against the current CLI version (1.x) to confirm CLI coverage. **Resolved (2026-05-28, v1): direct settings.json `mcpServers` edits.** `hermes install` writes resolved MCP server defs into `~/.claude/settings.json`'s `mcpServers` map. Rationale: deterministic, testable without a live `claude` binary, and idempotent. Note: on this machine global settings.json has no MCP servers (the mempalace MCP rides its plugin), so this path is exercised mainly by captured/authored servers. Revisit `claude mcp add` if a future CLI version makes settings.json edits unreliable.
 3. **CLI binary name conflict** — is `hermes` already taken by some other tool the user might want? Fallback: `hermes-agent` or `hermes-setup`. **Resolved (2026-05-27): `hermes`** — verified no conflicting binary on the user's PATH (`type -a hermes` shows only the pipx-installed entrypoint). `pyproject.toml` ships the `hermes` console-script.
 4. **Selective install** — do we need `hermes install --only skills,mcp` symmetric to `capture --only`? Probably yes for iteration, but tasks.md leaves it as a stretch goal.

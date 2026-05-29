@@ -13,7 +13,7 @@ fresh machine.
 ## Bootstrap a new machine
 
 ```sh
-curl -fsSL https://gitcode.com/<user>/hermes_setup/raw/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Dmitriy403/hermes_setup/main/install.sh | bash
 ```
 
 `install.sh` installs prerequisites (Homebrew + `python`/`git`/`node`/`pipx` on
@@ -23,8 +23,7 @@ macOS), the Claude Code CLI, clones this repo to `~/.hermes_setup`, installs the
 
 Environment overrides: `HERMES_REPO_URL`, `HERMES_REPO_REF`, `HERMES_HOME_DIR`,
 `HERMES_SECRETS_FILE` (copy a prepared secrets file in), `HERMES_NONINTERACTIVE=1`
-(unattended), `HERMES_SKIP_INSTALL=1` (stop before `hermes install`). Replace
-`<user>` with the actual gitcode path before publishing.
+(unattended), `HERMES_SKIP_INSTALL=1` (stop before `hermes install`).
 
 > Linux is best-effort (the script branches on `uname`); Windows users should
 > use WSL.

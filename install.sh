@@ -2,10 +2,10 @@
 # Hermes bootstrap — installs prerequisites, clones the repo, installs the
 # `hermes` CLI, and hands off to `hermes install`.
 #
-#   curl -fsSL https://gitcode.com/<user>/hermes_setup/raw/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Dmitriy403/hermes_setup/main/install.sh | bash
 #
 # Environment overrides:
-#   HERMES_REPO_URL        git URL to clone (default: gitcode placeholder below)
+#   HERMES_REPO_URL        git URL to clone (default: the public GitHub repo)
 #   HERMES_REPO_REF        branch/tag to checkout (default: main)
 #   HERMES_HOME_DIR        clone destination (default: ~/.hermes_setup)
 #   HERMES_SECRETS_FILE    path to a secrets.env to copy into the repo
@@ -14,7 +14,7 @@
 
 set -eu
 
-HERMES_REPO_URL="${HERMES_REPO_URL:-https://gitcode.com/CHANGEME/hermes_setup.git}"
+HERMES_REPO_URL="${HERMES_REPO_URL:-https://github.com/Dmitriy403/hermes_setup.git}"
 HERMES_REPO_REF="${HERMES_REPO_REF:-main}"
 HERMES_HOME_DIR="${HERMES_HOME_DIR:-$HOME/.hermes_setup}"
 HERMES_NONINTERACTIVE="${HERMES_NONINTERACTIVE:-0}"
