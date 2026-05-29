@@ -54,7 +54,7 @@
 - [x] 6.2 In `install.sh`, install the `claude` CLI at the version pinned by the manifest (or latest if no manifest yet).
 - [x] 6.3 In `install.sh`, clone the repo to `~/.hermes_setup` (or `git -C` pull if it already exists) and `pip install -e ~/.hermes_setup`.
 - [x] 6.4 In `install.sh`, honor `HERMES_NONINTERACTIVE=1` and `HERMES_SECRETS_FILE=/path`; otherwise prompt the user to populate `secrets.env` before running `hermes install`.
-- [ ] 6.5 End-to-end manual test on a clean macOS VM: `curl … | sh` → followed by `hermes verify` returns clean. *(MANUAL: requires a clean VM (UTM/Multipass) — cannot be automated here. install.sh is `bash -n` + shellcheck-clean; the automated pieces (pipx install, hermes install/verify) are covered by §1–§5 tests. Run on a real VM before tagging v0.1.0.)*
+- [ ] 6.5 End-to-end manual test on a clean macOS VM: `curl … | sh` → followed by `hermes verify` returns clean. *(MANUAL: runbook lives at [tools/vm-bootstrap-test.md](tools/vm-bootstrap-test.md) — Flow A covers zero-config; gates A.1–A.6 must pass. Cannot be automated; the automated pieces (pipx install, hermes install/verify, install.sh syntax+config-url flow) are covered by §1–§5 + §18 tests.)*
 
 ## 8. Plugin: vision (skill)
 
@@ -83,7 +83,7 @@
 - [x] 12.3 Hand-edit `~/hermes_config/manifest/.redact.yaml` to plug any pattern gaps discovered in 12.2; re-run capture; repeat until clean.
 - [x] 12.4 Populate `~/hermes_config/secrets.env` with real values for the variables the manifest references (e.g. any MCP/plugin secrets). `secrets.env` stays gitignored even in the private repo. *(no secrets needed — this config has 0 MCP servers and no secret-shaped values; secrets.env.example is empty.)*
 - [x] 12.6 Commit the manifest to the PRIVATE `hermes_config` repo. Do NOT commit `secrets.env`. The public `hermes_setup` repo receives nothing personal. *(Local commit done in ~/hermes_config (private GitHub: Dmitriy403/hermes_config). `git push` is the user's manual step — the harness hard-blocks pushing personal config to an external repo.)*
-- [ ] 12.7 Test full bootstrap on a clean macOS VM (Multipass or UTM): `curl|bash` the public tool, then `hermes install --manifest-dir <clone of hermes_config>`; grant Accessibility & Screen Recording, then confirm `hermes verify` returns clean and the v0.1.0 plugins (vision, macos-control) respond to a basic smoke check.
+- [ ] 12.7 Test full bootstrap on a clean macOS VM (Multipass or UTM): `curl|bash` the public tool, then `hermes install --manifest-dir <clone of hermes_config>`; grant Accessibility & Screen Recording, then confirm `hermes verify` returns clean and the v0.1.0 plugins (vision, macos-control) respond to a basic smoke check. *(MANUAL: runbook at [tools/vm-bootstrap-test.md](tools/vm-bootstrap-test.md) — Flow B drives BYO-config via `HERMES_CONFIG_URL=… curl|bash`; gates B.1–B.5. The post-§18.6–§18.10 install.sh handles both bootstrap paths.)*
 
 ## 18. Two-repo support: manifest_dir / tool_root split + $HOME templating
 <!-- New v0.1.0 work from design.md Decision 20. Required for the public-tool / private-config split to function. -->
