@@ -1,0 +1,26 @@
+[project]
+name = "hermes-backups"
+version = "0.1.0"
+description = "restic-based scheduled backups for the Hermes agent."
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+]
+# System binaries restic (+ rclone for cloud destinations) install lazily via
+# brew (Decision 18). python-telegram-bot is optional (failure alerts).
+
+[project.scripts]
+hermes-backup = "backups.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Flat layout: the package `backups` lives directly in this directory, so map
+# the package name to "." (find-with-where=["."] looks for a backups/ subdir
+# that doesn't exist and installs nothing).
+[tool.setuptools]
+packages = ["backups"]
+
+[tool.setuptools.package-dir]
+"backups" = "."

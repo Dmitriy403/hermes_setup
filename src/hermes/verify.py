@@ -15,7 +15,10 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
-from . import paths
+from shutil import which
+
+from . import paths, plugins_registry
+from .install import launchd as tool_launchd
 from .install.installer import _build_settings
 from .manifest import Manifest, parse_secrets_env, resolve_manifest_env
 
@@ -184,6 +187,39 @@ def _probe_cdhash(binary: Path) -> str | None:
     return None
 
 
+def _registered(config_root: Path, manifest: Manifest) -> list:
+    has_backups = (config_root / "manifest" / "backups.yaml").exists()
+    names = [s.name for s in manifest.mcp_servers]
+    return plugins_registry.registered_for_manifest(names, has_backups)
+
+
+def _verify_plugin_packages(config_root: Path, manifest: Manifest) -> list[DriftRecord]:
+    records: list[DriftRecord] = []
+    for info in _registered(config_root, manifest):
+        if not plugins_registry.installable(info):
+            continue
+        missing = [s for s in info.console_scripts if which(s) is None]
+        if missing:
+            records.append(DriftRecord("plugin-package", info.name, "missing",
+                                       f"console-script(s) not on PATH: {', '.join(missing)}"))
+        else:
+            records.append(DriftRecord("plugin-package", info.name, "match"))
+    return records
+
+
+def _verify_launchd(config_root: Path, home: Path, manifest: Manifest) -> list[DriftRecord]:
+    records: list[DriftRecord] = []
+    agents = tool_launchd.launch_agents_dir(home)
+    for info in _registered(config_root, manifest):
+        if not info.launchd:
+            continue
+        plist = agents / f"{info.launchd.label}.plist"
+        records.append(DriftRecord("launchd", info.launchd.label,
+                                   "match" if plist.exists() else "missing",
+                                   None if plist.exists() else f"plist absent at {plist}"))
+    return records
+
+
 def _verify_layer_b(repo_root: Path, home: Path) -> list[DriftRecord]:
     perms_path = repo_root / "manifest" / "permissions.yaml"
     if not perms_path.exists() or yaml is None:
@@ -220,6 +256,8 @@ def verify(config_root: str | Path | None = None, home: str | Path | None = None
     records += _verify_settings(cfg, claude, resolved, home_path)
     records += _verify_skills(cfg, claude, manifest)
     records += _verify_plugins(claude, manifest)
+    records += _verify_plugin_packages(cfg, manifest)
+    records += _verify_launchd(cfg, home_path, manifest)
     records += _verify_probe(tool)
     records += _verify_layer_b(cfg, home_path)
     return records

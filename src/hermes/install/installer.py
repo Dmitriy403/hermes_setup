@@ -20,8 +20,9 @@ from pathlib import Path
 from shutil import which
 from typing import Any
 
-from .. import paths
+from .. import paths, plugins_registry
 from ..manifest import Manifest, parse_secrets_env, resolve_manifest_env
+from . import launchd as tool_launchd
 from . import sandbox_profile
 
 try:
@@ -294,6 +295,64 @@ def step_layer_b(repo_root: Path, home: Path, mut: Mutator) -> None:
                        "leaving it in place — remove manually if unwanted.")
 
 
+# ---- plugin install orchestration (form B) ----
+
+
+def _registered_plugins(config_root: Path, manifest: Manifest) -> list:
+    has_backups = (config_root / "manifest" / "backups.yaml").exists()
+    names = [s.name for s in manifest.mcp_servers]
+    return plugins_registry.registered_for_manifest(names, has_backups)
+
+
+def step_plugin_packages(tool_root: Path, config_root: Path, manifest: Manifest, mut: Mutator) -> None:
+    """pipx-inject each registered plugin's package into the hermes venv."""
+    plugins = [p for p in _registered_plugins(config_root, manifest)
+               if plugins_registry.installable(p)]
+    if not plugins:
+        return
+    pipx = which("pipx")
+    for info in plugins:
+        if all(which(s) for s in info.console_scripts):
+            mut.log.append(f"unchanged: plugin {info.name} (console-script present)")
+            continue
+        plugin_dir = str(tool_root / info.rel_dir)
+        if pipx:
+            # --include-apps puts the console-script on PATH (~/.local/bin) so
+            # MCP commands resolve and `hermes verify` doesn't see false drift.
+            mut.run([pipx, "inject", "hermes", plugin_dir, "--include-apps"],
+                    label=f"pipx inject {info.name}")
+        else:
+            mut.run([sys.executable, "-m", "pip", "install", plugin_dir],
+                    label=f"pip install {info.name}")
+
+
+def step_launchd_jobs(tool_root: Path, config_root: Path, home: Path, manifest: Manifest, mut: Mutator) -> None:
+    """Write + load a LaunchAgent for each registered plugin that declares one."""
+    jobs = [p for p in _registered_plugins(config_root, manifest) if p.launchd]
+    if not jobs:
+        return
+    secrets = parse_secrets_env(config_root / "secrets.env")
+    agents = tool_launchd.launch_agents_dir(home)
+    launchctl = which("launchctl") or "/bin/launchctl"
+    for info in jobs:
+        job = info.launchd
+        program_args = [sys.executable, "-m", job.module, *job.args]
+        # launchd jobs don't inherit the login shell, so embed the secrets the
+        # job needs plus the config root (so the CLI finds manifest/backups.yaml).
+        env = {k: secrets[k] for k in job.env_keys if k in secrets}
+        env["HERMES_MANIFEST_DIR"] = str(config_root)
+        # launchd's default PATH omits Homebrew, so jobs that shell out to
+        # restic/ffmpeg/etc. can't find them; prepend the usual brew prefixes.
+        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+        plist = tool_launchd.generate_agent_plist(
+            job.label, program_args, keep_alive=job.keep_alive,
+            start_interval=job.start_interval, env=env)
+        plist_path = agents / f"{job.label}.plist"
+        mut.write_text(plist_path, plist, mode=0o600,
+                       label=f"~/Library/LaunchAgents/{job.label}.plist")
+        mut.run([launchctl, "load", "-w", str(plist_path)], label=f"launchctl load {job.label}")
+
+
 # ---- orchestrator ----
 
 
@@ -321,5 +380,7 @@ def install(config_root: str | Path | None = None, home: str | Path | None = Non
     step_plugins(manifest, mut)
     step_commands_hooks(cfg, claude, manifest, mut)
     step_layer_b(cfg, home_path, mut)
+    step_plugin_packages(tool, cfg, manifest, mut)
+    step_launchd_jobs(tool, cfg, home_path, manifest, mut)
 
     return InstallResult(actions=mut.log)

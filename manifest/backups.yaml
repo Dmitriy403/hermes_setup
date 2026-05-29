@@ -1,0 +1,42 @@
+# Starter backups.yaml — copy into your private hermes_config and customize.
+# `hermes-backup` translates this into restic invocations. Destination
+# credentials (for rclone/cloud) go in secrets.env as ${VAR}, never here.
+
+schema_version: 1
+
+sources:
+  - path: "~/.claude"                # Claude Code config, skills, keybindings, auto-memory
+    excludes:                        # the same ephemerals the manifest excludes
+      - "**/projects"
+      - "**/sessions"
+      - "**/session-env"
+      - "**/history.jsonl"
+      - "**/todos"
+      - "**/tasks"
+      - "**/telemetry"
+      - "**/debug"
+      - "**/cache"
+      - "**/paste-cache"
+      - "**/backups"
+      - "**/file-history"
+      - "**/shell-snapshots"
+  - path: "~/.mempalace"             # external memory (drawers, KG, embeddings)
+    excludes:
+      - "**/palace.backup"           # redundant in-place copy MemPalace keeps itself
+  - path: "~/.ssh"                   # SSH keys — tiny, irreplaceable (repo is encrypted)
+  # - path: "${BACKUP_SECRETS_PATH}"   # uncomment to back up your secret vault
+
+# Universal excludes (node_modules, __pycache__, .DS_Store, .git/objects, …)
+# are added automatically; add more here or via BACKUP_EXTRA_EXCLUDES (colon-sep).
+excludes: []
+
+destination:
+  kind: local                        # local | external_disk | rclone:<remote>
+  path: "~/backups"                  # local restic repo (start here; switch to disk/cloud later)
+  # For cloud, e.g.:
+  #   kind: "rclone:b2_personal"
+  #   repo: "hermes-backups"
+  #   (set RCLONE_B2_KEY_ID / RCLONE_B2_APP_KEY in secrets.env)
+
+schedule:
+  interval_seconds: 3600             # hourly

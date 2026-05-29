@@ -38,6 +38,49 @@ The security/privacy/correctness logic (telegram allowlist, voice cloud-off guar
 - **Live edges untestable in CI without deps** (Telegram token, `whisper.cpp`, `restic`). Mitigation: pure cores fully unit-tested; live round-trips deferred to a real-deps machine / the VM smoke. Per Decision 18.
 - **Cross-plugin coupling**: `vision` analyzes Telegram photos, `voice` transcribes Telegram voice notes, `backups` alerts via `telegram-bot`. `telegram-bot` is the keystone — build it first so its tool contracts settle before the others lean on them.
 
+## Decision: plugin install orchestration (form B)
+
+`hermes install` writes MCP entries into `settings.json` but does **not** put
+the plugin packages or their launchd jobs on the machine — so the registered
+MCP commands (`hermes-telegram-bot`, `hermes-voice`, `hermes-macos-control`)
+aren't on PATH, and the telegram/backup launchd jobs never load. This gap
+affects v0.1.0's `macos-control` too. Decided (2026-05-29) to close it via
+**form B**: keep plugins as separate packages (Decision 8), and have install
+inject the ones the manifest registers into the tool's pipx venv.
+
+**Mechanism** (path-deps via `file://` need absolute paths → not portable, so
+extras are dev-sugar, not the target-machine path):
+```
+  hermes install / install.sh:
+    for each plugin the manifest registers
+      (mcp/<name>.yaml command == hermes-* , or manifest/backups.yaml present):
+        pipx inject hermes <repo>/plugins/<dir>      # fallback: pip install <dir>
+    for each plugin with a launchd job:
+      write ~/Library/LaunchAgents/<label>.plist  +  launchctl bootstrap/load
+```
+
+**Plugin registry** (new, in the tool — e.g. `src/hermes/plugins_registry.py`):
+maps plugin name → {package dir, console-script(s), launchd label + generator,
+kind (mcp|skill|cli)}. The single source install consults to know what to
+inject and which plists to load.
+
+| plugin | dir | kind | console-script | launchd |
+|--------|-----|------|----------------|---------|
+| vision | manifest/skills/vision | skill | — | — |
+| macos-control | plugins/macos_control | mcp | hermes-macos-control | — |
+| telegram-bot | plugins/telegram_bot | mcp | hermes-telegram-bot | com.hermes.telegram-bot |
+| voice | plugins/voice | mcp | hermes-voice | — |
+| backups | plugins/backups | cli | hermes-backup | com.hermes.backup |
+
+Lazy (Decision 18 spirit): only registered plugins are injected; nothing is
+installed for plugins the manifest doesn't reference. Idempotent + dry-run via
+the existing install `Mutator`. `hermes verify` grows a check that registered
+plugins' console-scripts exist and their launchd jobs are loaded (closes §3.8).
+
+Rejected: **A** (one package — contradicts Decision 8, fat venv) and **C**
+(install infers everything with no explicit registry — more brittle than a
+declared registry).
+
 ## Open Questions
 
 1. Telegram: bundle `whisper.cpp` as a submodule vs `brew install whisper-cpp` (leaning brew, per parent Decision 11/Open Q6).

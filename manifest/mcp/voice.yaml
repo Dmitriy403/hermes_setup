@@ -1,0 +1,13 @@
+name: voice
+command: hermes-voice
+args: []
+# Defaults: local whisper.cpp only, cloud OFF (no audio leaves the machine).
+# These are per-machine knobs, not secrets — literal values, so install never
+# treats them as missing required secrets.
+env:
+  VOICE_WHISPER_MODEL: base
+  VOICE_CLOUD_MODE: "off"
+# To enable the cloud backend, in your private hermes_config add to this entry:
+#   VOICE_CLOUD_MODE: fallback     # or primary
+#   VOICE_CLOUD_FALLBACK: "1"
+#   OPENAI_API_KEY: ${OPENAI_API_KEY}   # then put the real key in secrets.env

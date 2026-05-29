@@ -10,6 +10,16 @@ dependencies = [
 [project.scripts]
 hermes = "hermes.cli:main"
 
+# Dev convenience: `pip install -e '.[telegram]'` etc. On target machines the
+# plugins are installed by `hermes install` via `pipx inject` of the plugin
+# dirs (design Decision: plugin install orchestration, form B), not these.
+[project.optional-dependencies]
+macos-control = ["hermes-macos-control"]
+telegram = ["hermes-telegram-bot"]
+voice = ["hermes-voice"]
+backups = ["hermes-backups"]
+all = ["hermes-macos-control", "hermes-telegram-bot", "hermes-voice", "hermes-backups"]
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"

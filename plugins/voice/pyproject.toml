@@ -1,0 +1,29 @@
+[project]
+name = "hermes-voice"
+version = "0.1.0"
+description = "Audio transcription MCP server (local whisper.cpp default, opt-in cloud) for the Hermes agent."
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0",
+]
+# Optional: `openai` for the cloud backend (install only if VOICE_CLOUD_MODE != off).
+# System binaries whisper-cpp + ffmpeg install lazily via brew (Decision 18).
+
+[project.optional-dependencies]
+cloud = ["openai>=1.0"]
+
+[project.scripts]
+hermes-voice = "voice.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# Flat layout: the package `voice` lives directly in this directory, so map the
+# package name to "." (find-with-where=["."] looks for a voice/ subdir that
+# doesn't exist and installs nothing).
+[tool.setuptools]
+packages = ["voice"]
+
+[tool.setuptools.package-dir]
+"voice" = "."
