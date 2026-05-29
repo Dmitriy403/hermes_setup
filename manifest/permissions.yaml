@@ -1,0 +1,145 @@
+# manifest/permissions.yaml
+#
+# UNLOCKED PROFILE — broad allow + targeted denylist.
+# v1 default: does NOT break a typical Claude Code workflow but DOES
+# add explicit forbidden paths and shell deny rules that catch common
+# foot-guns. For tighter posture see the planned `tighten-permissions`
+# change (deny-by-default + per-project overlay).
+
+schema_version: 1
+
+filesystem:
+  # Claude can read, write, and execute from these paths.
+  write-exec:
+    - "~/projects/**"
+    - "~/.hermes_setup/**"
+    - "/tmp/**"
+
+  # Claude can write here, but Bash will not cd here or run binaries
+  # from these paths (defense-in-depth against dropped scripts).
+  write:
+    - "~/Documents/**"
+    - "~/.claude/projects/**"
+    - "~/.cache/**"
+    - "~/.hermes/**"
+
+  # Read-only zones.
+  read:
+    - "~/Desktop/**"
+    - "~/Downloads/**"
+    - "/usr/local/**"
+    - "/opt/homebrew/**"
+    - "~/Library/Application Support/Claude/**"
+
+  # Hard deny — wins over any allow above.
+  forbidden:
+    - "~/.ssh/**"
+    - "~/.aws/**"
+    - "~/.gnupg/**"
+    - "~/.config/gh/**"
+    - "~/Library/Keychains/**"
+    - "~/Library/Application Support/com.apple.TCC/**"
+    - "~/Library/Cookies/**"
+    - "**/secrets.env"
+    - "**/.env"
+    - "**/.env.local"
+    - "**/credentials.json"
+    - "**/id_rsa*"
+    - "**/id_ed25519*"
+    - "**/*.pem"
+    - "**/*.key"
+
+shell:
+  allow:
+    - git
+    - python3
+    - pip
+    - npm
+    - node
+    - brew
+    - claude
+    - gh
+    - restic
+    - rclone
+    - ls
+    - cat
+    - grep
+    - find
+    - awk
+    - sed
+    - jq
+    - openspec
+
+  ask:
+    - curl
+    - wget
+    - ssh
+    - scp
+    - rsync
+    - rm
+
+  deny:
+    - sudo
+    - security
+    - osascript
+    - defaults
+    - launchctl
+    - tccutil
+    - "rm -rf /"
+    - "rm -rf ~"
+    - "rm -rf ~/*"
+    - "chmod -R 777"
+    - "dd if=*of=/dev/*"
+
+network:
+  domains:
+    - api.anthropic.com
+    - api.openai.com
+    - api.telegram.org
+    - gitcode.com
+    - github.com
+    - raw.githubusercontent.com
+    - pypi.org
+    - files.pythonhosted.org
+    - registry.npmjs.org
+  default: ask
+
+mcp:
+  enabled:
+    - "mempalace.*"
+    - "telegram-bot.*"
+    - "macos-control.*"
+    - "voice.*"
+    - "vision.*"
+    - "backups.*"
+  disabled: []
+
+tcc:
+  screen-recording:
+    required-by: [macos-control]
+  accessibility:
+    required-by: [macos-control]
+  automation:
+    targets:
+      - bundle-id: com.apple.finder
+        required-by: [macos-control]
+        reason: window listing and focus
+      - bundle-id: com.apple.systemevents
+        required-by: [macos-control]
+        reason: keystroke injection and window control
+  microphone:
+    required-by: [plugin-voice]
+    reason: recording for whisper.cpp
+  full-disk-access:
+    required-by: [plugin-backups]
+    reason: read ~/Library for backup
+  files:
+    - path: "~/Documents"
+      required-by: [plugin-backups]
+    - path: "~/Desktop"
+      required-by: [plugin-backups]
+
+security:
+  layer_b:
+    enabled: false
+    profile_path: "~/.hermes/profile.sb"

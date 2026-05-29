@@ -1,0 +1,49 @@
+# Canonical mapping: TCC category -> Seatbelt allow rules.
+#
+# Single source of truth shared by:
+#   * the Swift probe (tools/probe-tcc/Sources/SandboxRules.swift) — emits
+#     these as `required_sandbox_rules` when a category is blocked_by_sandbox.
+#   * the Python profile generator (src/hermes/install/sandbox_profile.py) —
+#     expands these into the generated ~/.hermes/profile.sb.
+#
+# A consistency check (tools/probe-tcc/check_sandbox_rules.py) asserts the
+# Swift constants match this file so the two consumers never drift.
+#
+# `{bundle_id}` and `{path}` are templated per Automation target / Files path.
+
+schema_version: 1
+
+categories:
+  screen_recording:
+    - '(allow mach-lookup (global-name "com.apple.windowserver.active"))'
+    - '(allow mach-lookup (global-name "com.apple.tccd"))'
+
+  accessibility:
+    - '(allow mach-lookup (global-name "com.apple.accessibility.api"))'
+    - '(allow mach-lookup (global-name "com.apple.tccd"))'
+
+  full_disk_access:
+    - '(allow file-read* (literal "/Library/Application Support/com.apple.TCC/TCC.db"))'
+
+  microphone:
+    - '(allow mach-lookup (global-name "com.apple.audio.audiohald"))'
+    - '(allow mach-lookup (global-name "com.apple.tccd"))'
+
+  camera:
+    - '(allow mach-lookup (global-name "com.apple.cmio.AppleCameraAssistant"))'
+    - '(allow mach-lookup (global-name "com.apple.tccd"))'
+
+  input_monitoring:
+    - '(allow mach-lookup (global-name "com.apple.iohideventsystem"))'
+
+# Automation is templated: base rules apply once, then per-target.
+automation:
+  base:
+    - '(allow mach-lookup (global-name "com.apple.coreservices.appleevents"))'
+  per_target:
+    - '(allow appleevent-send (subpath "{bundle_id}"))'
+
+# Files is templated per path.
+files:
+  per_path:
+    - '(allow file-read* (subpath "{path}"))'

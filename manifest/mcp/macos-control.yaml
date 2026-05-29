@@ -1,0 +1,4 @@
+name: macos-control
+command: hermes-macos-control
+args: []
+env: {}

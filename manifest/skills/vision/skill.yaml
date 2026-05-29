@@ -1,0 +1,6 @@
+# Vision skill — bundled, local source. Installed to ~/.claude/skills/vision/.
+# Per design Decision 9, vision is a skill (not an MCP server): Claude's native
+# multimodal vision does the work; this skill packages the mode prompt patterns
+# plus a headless helper (files/run.py).
+name: vision
+source: local

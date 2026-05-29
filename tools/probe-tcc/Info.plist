@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleIdentifier</key>
+    <string>org.hermes.probe-tcc</string>
+    <key>CFBundleExecutable</key>
+    <string>hermes-probe-tcc</string>
+    <key>CFBundleName</key>
+    <string>Hermes TCC Probe</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>LSUIElement</key>
+    <true/>
+
+    <!--
+        Usage Descriptions — REQUIRED for each TCC category the probe touches.
+        If a key is missing and the corresponding API is called, macOS will
+        SIGKILL the probe without a warning. Apple introduced this enforcement
+        in Mojave.
+
+        Categories without an Info.plist key (Screen Recording, Accessibility,
+        Full Disk Access, Input Monitoring) are checked via separate APIs that
+        do not require Usage Descriptions.
+    -->
+
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Hermes doctor checks which applications are reachable via Apple Events automation. No automation is performed without user consent.</string>
+
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Hermes doctor checks microphone access status for plugin-voice. The probe does not capture audio.</string>
+
+    <key>NSCameraUsageDescription</key>
+    <string>Hermes doctor checks camera access status. The probe does not capture video.</string>
+
+    <key>NSDocumentsFolderUsageDescription</key>
+    <string>Hermes doctor checks read access to ~/Documents for plugin-backups. The probe does not read user documents.</string>
+
+    <key>NSDesktopFolderUsageDescription</key>
+    <string>Hermes doctor checks read access to ~/Desktop for plugin-backups. The probe does not read desktop files.</string>
+
+    <key>NSDownloadsFolderUsageDescription</key>
+    <string>Hermes doctor checks read access to ~/Downloads. The probe does not read downloads.</string>
+
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Hermes doctor checks Speech Recognition access status. The probe does not perform recognition.</string>
+</dict>
+</plist>

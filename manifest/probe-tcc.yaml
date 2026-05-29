@@ -1,0 +1,19 @@
+# Sidecar manifest for tools/probe-tcc/ — committed alongside the
+# binary so `hermes verify` can detect drift between the source tree
+# and the on-disk `bin/hermes-probe-tcc`.
+#
+# Update this value whenever you commit a new `bin/hermes-probe-tcc`.
+# The build script prints the current cdhash on every successful build.
+
+schema_version: 1
+
+probe:
+  binary: bin/hermes-probe-tcc
+  bundle_id: org.hermes.probe-tcc
+  signature: ad-hoc
+  min_macos_target: arm64-apple-macosx13.0
+
+  # cdhash of the committed binary. `hermes verify` compares this against
+  # the file on disk; drift means someone forgot to commit either the
+  # binary or this sidecar after rebuilding.
+  expected_cdhash: 546afce49cb3cc7815949136433e6338bcbda2b9

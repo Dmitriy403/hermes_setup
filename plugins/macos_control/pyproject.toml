@@ -1,0 +1,19 @@
+[project]
+name = "hermes-macos-control"
+version = "0.1.0"
+description = "macOS automation MCP server for the Hermes agent (windows, screenshots, input)."
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0",
+]
+
+[project.scripts]
+hermes-macos-control = "macos_control.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["macos_control*"]
