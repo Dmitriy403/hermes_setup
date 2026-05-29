@@ -40,8 +40,8 @@ pattern and Decision 18 (fail-soft + lazy deps). -->
 
 ## 4. Cross-plugin + seed
 
-- [ ] 4.1 Re-introduce `restic init` for the user's real destination (was §12.5 in the parent), once the backups plugin lands. *(USER: real restic init at your chosen destination.)*
-- [ ] 4.2 Add `telegram-bot`, `voice`, `backups` to the user's `hermes_config` manifest and `secrets.env` (TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_CHAT_IDS, optional OPENAI_API_KEY, backup destination creds, BACKUP_ALERT_CHAT_ID). *(USER: add the 3 plugins to ~/hermes_config manifest + secrets.env, then push.)*
+- [x] 4.1 Re-introduce `restic init` for the user's real destination (was §12.5 in the parent), once the backups plugin lands. *(Done: `restic init` ran against the chosen local destination `~/backups`; hourly `com.hermes.backup` LaunchAgent verified end-to-end, two snapshots + `restic check` clean.)*
+- [x] 4.2 Add `telegram-bot`, `voice`, `backups` to the user's `hermes_config` manifest and `secrets.env` (TELEGRAM_BOT_TOKEN, TELEGRAM_ALLOWED_CHAT_IDS, optional OPENAI_API_KEY, backup destination creds, BACKUP_ALERT_CHAT_ID). *(Done: voice/telegram-bot/macos-control registered as MCP servers in ~/hermes_config (sidecars + mcp_servers list), backups wired via manifest/backups.yaml; RESTIC_PASSWORD + real TELEGRAM_BOT_TOKEN/TELEGRAM_ALLOWED_CHAT_IDS in the gitignored secrets.env; config committed + pushed. Bot getMe verified live (@hermes_ai_best_bot); telegram-bot launchd worker running.)*
 - [x] 4.3 Document each plugin in `plugins/<name>/README.md` (what it does, env vars, required permissions, smoke-test commands).
 
 ## 5. Plugin install orchestration (form B — design.md "Decision: plugin install orchestration")
