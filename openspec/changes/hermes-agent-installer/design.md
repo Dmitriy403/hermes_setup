@@ -297,6 +297,16 @@ Alternatives considered:
 
 Consequence for §12: "seed the real manifest" now means `hermes capture --manifest-dir ~/hermes_config` into the **private** repo, then commit there — NOT into this public repo, which stays tool-only. New v0.1.0 plumbing tasks (§18) implement the `tool_root`/`manifest_dir` split and `$HOME` templating.
 
+**Factory defaults — what's actually in the public `manifest/`** (added 2026-05-29; tasks §18.6–§18.10). The "factory `manifest/`" the code already promises must include a `manifest/hermes.yaml` index — without it, bare `hermes install` aborts on a fresh checkout. The default-on set is the **no-secret** plugins so `curl|bash` on a clean machine just works:
+
+- `vision` (skill) — zero deps beyond `claude`.
+- `macos-control` (mcp) — no secrets; needs Accessibility / Screen Recording TCC (manual grant, per Decision 13).
+- `voice` (mcp) — no secrets; `whisper-cpp` + `ffmpeg` are *fail-soft* (Decision 18), surfaced as a pre-req warning at install time (§18.7) instead of failing only at first transcription.
+
+`telegram-bot` and `backups` stay *opt-in* — they require real secrets (bot token, `RESTIC_PASSWORD` + destination) and only get registered when the user layers a private `hermes_config` via `--manifest-dir` / `HERMES_CONFIG_URL`. Layering is **replace**, not merge: `config_root` is a single directory, and the private `hermes_config` already self-contains its own full `hermes.yaml`. Merge semantics would have been a much larger lift with no payoff given how few users would need partial overlays.
+
+`install.sh` honors `HERMES_CONFIG_URL` (§18.8) so power users can `HERMES_CONFIG_URL=… curl|bash` and get the two-repo path in one shot; secrets then route to the config repo (fixing today's mismatch where `install.sh` writes them to the tool repo while install reads them from `config_root`).
+
 ## Open Questions
 
 1. **Repo host** — GitHub vs. gitcode? The user already uses gitcode for some projects; bootstrap URL needs to be picked before `install.sh` can be written. **Resolved (2026-05-29): GitHub** — both repos live on GitHub under `Dmitriy403` (`hermes_setup` public, `hermes_config` private). Earlier notes said gitcode; the user chose GitHub when creating the repos. The `install.sh` bootstrap URL is parameterized (Decision 7), so the host is a one-line swap.

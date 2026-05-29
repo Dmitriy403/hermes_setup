@@ -12,18 +12,54 @@ fresh machine.
 
 ## Bootstrap a new machine
 
+`install.sh` installs prerequisites (Homebrew + `python`/`git`/`node`/`pipx` on
+macOS), the Claude Code CLI, clones this repo to `~/.hermes_setup`, installs
+the `hermes` CLI via pipx (editable), and runs `hermes install`. There are two
+bootstrap flows: zero-config (factory plugins, no secrets) and BYO-config
+(layer your private `hermes_config`).
+
+### Zero-config — factory plugins, no secrets
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Dmitriy403/hermes_setup/main/install.sh | bash
 ```
 
-`install.sh` installs prerequisites (Homebrew + `python`/`git`/`node`/`pipx` on
-macOS), the Claude Code CLI, clones this repo to `~/.hermes_setup`, installs the
-`hermes` CLI via pipx (editable), helps you populate `secrets.env`, and runs
-`hermes install`.
+`hermes install` reads the factory `manifest/hermes.yaml` shipped in this repo
+and installs the no-secret plugins:
 
-Environment overrides: `HERMES_REPO_URL`, `HERMES_REPO_REF`, `HERMES_HOME_DIR`,
-`HERMES_SECRETS_FILE` (copy a prepared secrets file in), `HERMES_NONINTERACTIVE=1`
-(unattended), `HERMES_SKIP_INSTALL=1` (stop before `hermes install`).
+- `vision` (skill) — no extra deps.
+- `macos-control` (mcp) — needs Accessibility / Screen Recording (granted
+  manually; `hermes doctor` walks you through it).
+- `voice` (mcp) — `brew install whisper-cpp ffmpeg` for transcription. The
+  install surfaces this as a `warn:` line; `hermes verify` reports it as a
+  `brew-deps` drift entry. The plugin fails soft until the binaries are
+  present (no transcription, no crash).
+
+### BYO-config — layer your private `hermes_config`
+
+```sh
+HERMES_CONFIG_URL=git@github.com:<you>/hermes_config.git \
+  curl -fsSL https://raw.githubusercontent.com/Dmitriy403/hermes_setup/main/install.sh | bash
+```
+
+`install.sh` clones the config repo to `~/hermes_config` (override with
+`HERMES_CONFIG_DIR`), copies `HERMES_SECRETS_FILE` (if provided) into
+`<config>/secrets.env`, and runs `hermes install --manifest-dir <config>` —
+so your private `hermes.yaml`, MCP sidecars, `backups.yaml`, and `secrets.env`
+fully replace the factory defaults (this is *replace*, not merge).
+
+### Environment overrides
+
+| Var | Default | Purpose |
+|---|---|---|
+| `HERMES_REPO_URL` | this repo | tool repo to clone |
+| `HERMES_REPO_REF` | `main` | branch/tag |
+| `HERMES_HOME_DIR` | `~/.hermes_setup` | tool clone destination |
+| `HERMES_CONFIG_URL` | unset | private config repo URL (enables BYO mode) |
+| `HERMES_CONFIG_DIR` | `~/hermes_config` | private config clone destination |
+| `HERMES_SECRETS_FILE` | unset | path to a prepared `secrets.env` |
+| `HERMES_NONINTERACTIVE` | `0` | `=1` for unattended runs (CI) |
+| `HERMES_SKIP_INSTALL` | `0` | `=1` to stop before `hermes install` |
 
 > Linux is best-effort (the script branches on `uname`); Windows users should
 > use WSL.

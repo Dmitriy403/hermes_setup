@@ -20,7 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from hermes import plugins_registry as reg  # noqa: E402
 from hermes.install import launchd as tl  # noqa: E402
-from hermes.install.installer import Mutator, install, step_launchd_jobs  # noqa: E402
+from hermes.install.installer import (  # noqa: E402
+    Mutator, install, step_launchd_jobs, step_plugin_brew_deps,
+)
 from hermes.manifest import Manifest, McpServer  # noqa: E402
 from hermes.verify import verify  # noqa: E402
 
@@ -169,6 +171,71 @@ def test_verify_flags_missing_package_and_launchd():
         assert pkg.status == "missing"          # hermes-telegram-bot not on PATH
         ld = next(r for r in records if r.component == "launchd" and r.name == "com.hermes.telegram-bot")
         assert ld.status == "missing"           # no plist installed
+
+
+# ---- 18.6/18.7 factory install + brew_deps surfacing ----
+
+def _factory_repo(repo: Path, mcp_servers: tuple[str, ...]) -> None:
+    """Write a minimal factory-shaped manifest under `repo` registering the
+    given MCP servers (sidecars copied from the real tool manifest/mcp/)."""
+    (repo / "manifest" / "mcp").mkdir(parents=True)
+    real_mcp = Path(__file__).resolve().parents[1] / "manifest" / "mcp"
+    body = ("schema_version: 1\nskills: []\n"
+            f"mcp_servers:\n" + "".join(f"- {n}\n" for n in mcp_servers) +
+            "commands: []\nhooks: []\n"
+            "files:\n  claude_md: false\n  settings: false\n  keybindings: false\n")
+    (repo / "manifest" / "hermes.yaml").write_text(body)
+    for name in mcp_servers:
+        (repo / "manifest" / "mcp" / f"{name}.yaml").write_text(
+            (real_mcp / f"{name}.yaml").read_text())
+    (repo / "bin").mkdir(parents=True, exist_ok=True)
+    probe = repo / "bin" / "hermes-probe-tcc"
+    probe.write_text("#!/bin/sh\n")
+    probe.chmod(probe.stat().st_mode | stat.S_IXUSR)
+    (repo / "manifest" / "permissions.yaml").write_text("schema_version: 1\n")
+
+
+def test_factory_install_dry_run_registers_no_secret_plugins():
+    """Bare install (tool_root == config_root, factory manifest) injects
+    macos-control + voice; never touches telegram-bot/backups."""
+    with tempfile.TemporaryDirectory() as d:
+        repo, tgt = Path(d) / "repo", Path(d) / "tgt"
+        repo.mkdir(); tgt.mkdir()
+        _factory_repo(repo, ("macos-control", "voice"))
+        with _empty_path(Path(d)):
+            res = install(config_root=repo, home=tgt, tool_root=repo, dry_run=True)
+        log = "\n".join(res.actions)
+        for name in ("macos-control", "voice"):
+            assert (f"pipx inject {name}" in log) or (f"pip install {name}" in log), log
+        # opt-in plugins must NOT appear
+        assert "telegram-bot" not in log
+        assert "com.hermes.telegram-bot" not in log
+        assert "com.hermes.backup" not in log
+
+
+def test_step_plugin_brew_deps_warns_for_missing_voice_deps():
+    """voice → `brew install whisper-cpp ffmpeg` warning when bins absent."""
+    with tempfile.TemporaryDirectory() as d:
+        repo = Path(d) / "repo"; repo.mkdir()
+        _factory_repo(repo, ("voice",))
+        m = Manifest.load(repo)
+        with _empty_path(Path(d)):
+            mut = Mutator(dry_run=True)
+            step_plugin_brew_deps(repo, m, mut)
+    assert any("voice pre-reqs missing" in line and "whisper-cpp" in line and "ffmpeg" in line
+               for line in mut.log), mut.log
+
+
+def test_verify_emits_brew_deps_drift_for_voice():
+    with tempfile.TemporaryDirectory() as d:
+        repo, tgt = Path(d) / "repo", Path(d) / "tgt"
+        repo.mkdir(); tgt.mkdir()
+        _factory_repo(repo, ("voice",))
+        with _empty_path(Path(d)):
+            records = verify(config_root=repo, home=tgt, tool_root=repo)
+    bd = [r for r in records if r.component == "brew-deps" and r.name == "voice"]
+    assert bd, [r.component for r in records]
+    assert bd[0].status == "missing" and "whisper-cpp" in (bd[0].detail or "")
 
 
 def _run_standalone() -> int:

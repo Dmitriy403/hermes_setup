@@ -304,6 +304,22 @@ def _registered_plugins(config_root: Path, manifest: Manifest) -> list:
     return plugins_registry.registered_for_manifest(names, has_backups)
 
 
+def step_plugin_brew_deps(config_root: Path, manifest: Manifest, mut: Mutator) -> None:
+    """Surface missing brew binaries for registered plugins (non-fatal).
+
+    Plugins remain fail-soft at runtime per Decision 18; this just tells the
+    user up front what to `brew install` instead of them discovering it on the
+    first call.
+    """
+    for info in _registered_plugins(config_root, manifest):
+        if not info.brew_deps:
+            continue
+        missing = [b for b in info.brew_deps if which(b) is None]
+        if missing:
+            mut.log.append(
+                f"warn: plugin {info.name} pre-reqs missing — `brew install {' '.join(missing)}`")
+
+
 def step_plugin_packages(tool_root: Path, config_root: Path, manifest: Manifest, mut: Mutator) -> None:
     """pipx-inject each registered plugin's package into the hermes venv."""
     plugins = [p for p in _registered_plugins(config_root, manifest)
@@ -380,6 +396,7 @@ def install(config_root: str | Path | None = None, home: str | Path | None = Non
     step_plugins(manifest, mut)
     step_commands_hooks(cfg, claude, manifest, mut)
     step_layer_b(cfg, home_path, mut)
+    step_plugin_brew_deps(cfg, manifest, mut)
     step_plugin_packages(tool, cfg, manifest, mut)
     step_launchd_jobs(tool, cfg, home_path, manifest, mut)
 

@@ -28,6 +28,9 @@ class PluginInfo:
     kind: str                 # "mcp" | "skill" | "cli"
     console_scripts: tuple[str, ...] = ()
     launchd: LaunchdJob | None = None
+    # Brew-installable binaries the plugin shells out to (fail-soft at runtime
+    # per Decision 18; install surfaces them up front via `brew install <pkg>`).
+    brew_deps: tuple[str, ...] = ()
 
 
 REGISTRY: dict[str, PluginInfo] = {
@@ -44,10 +47,12 @@ REGISTRY: dict[str, PluginInfo] = {
                            env_keys=("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_CHAT_IDS"))),
     "voice": PluginInfo(
         name="voice", rel_dir="plugins/voice", kind="mcp",
-        console_scripts=("hermes-voice",)),
+        console_scripts=("hermes-voice",),
+        brew_deps=("whisper-cpp", "ffmpeg")),
     "backups": PluginInfo(
         name="backups", rel_dir="plugins/backups", kind="cli",
         console_scripts=("hermes-backup",),
+        brew_deps=("restic",),
         launchd=LaunchdJob(label="com.hermes.backup",
                            module="backups.cli", args=("backup",),
                            keep_alive=False, start_interval=3600,

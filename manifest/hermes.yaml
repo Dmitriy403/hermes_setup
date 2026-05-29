@@ -1,0 +1,28 @@
+# Factory defaults for the public hermes_setup tool.
+#
+# Bare `hermes install` (no --manifest-dir / HERMES_MANIFEST_DIR) reads THIS
+# file and installs the no-secret bundled plugins so a fresh machine works
+# out of the box (Decision 20; tasks §18.6–§18.10).
+#
+# Default-on (no secrets required):
+#   - vision (skill)       — zero deps beyond `claude`
+#   - macos-control (mcp)  — needs Accessibility / Screen Recording TCC (manual grant)
+#   - voice (mcp)          — whisper-cpp + ffmpeg via brew (fail-soft, surfaced at install)
+#
+# Opt-in (registered only when you layer a private hermes_config via
+# --manifest-dir / HERMES_CONFIG_URL):
+#   - telegram-bot         — needs TELEGRAM_BOT_TOKEN + TELEGRAM_ALLOWED_CHAT_IDS
+#   - backups              — needs RESTIC_PASSWORD + a destination
+schema_version: 1
+skills:
+- name: vision
+  source: local
+mcp_servers:
+- macos-control
+- voice
+commands: []
+hooks: []
+files:
+  claude_md: false
+  settings: false
+  keybindings: false

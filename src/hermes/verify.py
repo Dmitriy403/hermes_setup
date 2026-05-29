@@ -207,6 +207,21 @@ def _verify_plugin_packages(config_root: Path, manifest: Manifest) -> list[Drift
     return records
 
 
+def _verify_brew_deps(config_root: Path, manifest: Manifest) -> list[DriftRecord]:
+    """Per-plugin pre-req check (informational; plugins are fail-soft per Decision 18)."""
+    records: list[DriftRecord] = []
+    for info in _registered(config_root, manifest):
+        if not info.brew_deps:
+            continue
+        missing = [b for b in info.brew_deps if which(b) is None]
+        if missing:
+            records.append(DriftRecord("brew-deps", info.name, "missing",
+                                       f"`brew install {' '.join(missing)}`"))
+        else:
+            records.append(DriftRecord("brew-deps", info.name, "match"))
+    return records
+
+
 def _verify_launchd(config_root: Path, home: Path, manifest: Manifest) -> list[DriftRecord]:
     records: list[DriftRecord] = []
     agents = tool_launchd.launch_agents_dir(home)
@@ -257,6 +272,7 @@ def verify(config_root: str | Path | None = None, home: str | Path | None = None
     records += _verify_skills(cfg, claude, manifest)
     records += _verify_plugins(claude, manifest)
     records += _verify_plugin_packages(cfg, manifest)
+    records += _verify_brew_deps(cfg, manifest)
     records += _verify_launchd(cfg, home_path, manifest)
     records += _verify_probe(tool)
     records += _verify_layer_b(cfg, home_path)

@@ -8,7 +8,13 @@
 #   HERMES_REPO_URL        git URL to clone (default: the public GitHub repo)
 #   HERMES_REPO_REF        branch/tag to checkout (default: main)
 #   HERMES_HOME_DIR        clone destination (default: ~/.hermes_setup)
-#   HERMES_SECRETS_FILE    path to a secrets.env to copy into the repo
+#   HERMES_CONFIG_URL      OPTIONAL git URL of a private hermes_config repo. If
+#                          set, it is cloned to HERMES_CONFIG_DIR and `hermes
+#                          install --manifest-dir <that dir>` runs against it.
+#                          Unset → factory defaults from the tool's manifest/.
+#   HERMES_CONFIG_DIR      where to clone the config repo (default: ~/hermes_config)
+#   HERMES_SECRETS_FILE    path to a secrets.env to copy into the config dir
+#                          (or the tool repo if HERMES_CONFIG_URL is unset)
 #   HERMES_NONINTERACTIVE  =1 to skip all prompts (CI / unattended)
 #   HERMES_SKIP_INSTALL    =1 to stop after setup, before `hermes install`
 
@@ -17,6 +23,7 @@ set -eu
 HERMES_REPO_URL="${HERMES_REPO_URL:-https://github.com/Dmitriy403/hermes_setup.git}"
 HERMES_REPO_REF="${HERMES_REPO_REF:-main}"
 HERMES_HOME_DIR="${HERMES_HOME_DIR:-$HOME/.hermes_setup}"
+HERMES_CONFIG_DIR="${HERMES_CONFIG_DIR:-$HOME/hermes_config}"
 HERMES_NONINTERACTIVE="${HERMES_NONINTERACTIVE:-0}"
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -93,19 +100,49 @@ fi
 log "Installing the hermes CLI via pipx (editable)"
 pipx install --editable "$HERMES_HOME_DIR" --force
 
-# ---- 4. secrets ----
+# ---- 3.5. optional private config repo ----
+#
+# If HERMES_CONFIG_URL is set, clone it and install reads its manifest+secrets.
+# Otherwise install runs against the tool's factory manifest (no secrets needed).
 
-SECRETS_DST="$HERMES_HOME_DIR/secrets.env"
+MANIFEST_ROOT=""   # empty → factory; non-empty → `--manifest-dir $MANIFEST_ROOT`
+if [ -n "${HERMES_CONFIG_URL:-}" ]; then
+    if [ -d "$HERMES_CONFIG_DIR/.git" ]; then
+        log "Updating existing config at $HERMES_CONFIG_DIR"
+        git -C "$HERMES_CONFIG_DIR" pull --ff-only || true
+    else
+        log "Cloning $HERMES_CONFIG_URL → $HERMES_CONFIG_DIR"
+        git clone --depth 1 "$HERMES_CONFIG_URL" "$HERMES_CONFIG_DIR"
+    fi
+    MANIFEST_ROOT="$HERMES_CONFIG_DIR"
+    log "Using private config root: $MANIFEST_ROOT"
+fi
+
+# ---- 4. secrets ----
+#
+# Secrets land next to the manifest the install will read: in the config repo
+# when one was cloned, else in the tool repo (factory plugins need no secrets).
+
+if [ -n "$MANIFEST_ROOT" ]; then
+    SECRETS_DST="$MANIFEST_ROOT/secrets.env"
+    SECRETS_EXAMPLE="$MANIFEST_ROOT/secrets.env.example"
+else
+    SECRETS_DST="$HERMES_HOME_DIR/secrets.env"
+    SECRETS_EXAMPLE="$HERMES_HOME_DIR/secrets.env.example"
+fi
+
 if [ -n "${HERMES_SECRETS_FILE:-}" ]; then
-    log "Copying secrets from $HERMES_SECRETS_FILE"
+    log "Copying secrets from $HERMES_SECRETS_FILE → $SECRETS_DST"
     cp "$HERMES_SECRETS_FILE" "$SECRETS_DST"
     chmod 600 "$SECRETS_DST"
 elif [ ! -f "$SECRETS_DST" ]; then
-    if [ -f "$HERMES_HOME_DIR/secrets.env.example" ]; then
-        cp "$HERMES_HOME_DIR/secrets.env.example" "$SECRETS_DST"
+    if [ -f "$SECRETS_EXAMPLE" ]; then
+        cp "$SECRETS_EXAMPLE" "$SECRETS_DST"
         chmod 600 "$SECRETS_DST"
     fi
-    if [ "$HERMES_NONINTERACTIVE" = "1" ]; then
+    if [ -z "$MANIFEST_ROOT" ]; then
+        log "Factory install — no secrets required for the default plugins."
+    elif [ "$HERMES_NONINTERACTIVE" = "1" ]; then
         warn "secrets.env not populated (non-interactive). Fill $SECRETS_DST before 'hermes install'."
     else
         warn "Populate $SECRETS_DST with real values, then run 'hermes install'."
@@ -119,6 +156,14 @@ fi
 
 # ---- 5. hand off to hermes install ----
 
+run_hermes_install() {
+    if [ -n "$MANIFEST_ROOT" ]; then
+        hermes install --manifest-dir "$MANIFEST_ROOT"
+    else
+        hermes install
+    fi
+}
+
 if [ "${HERMES_SKIP_INSTALL:-0}" = "1" ]; then
     log "Setup complete. Run 'hermes install' when ready."
     exit 0
@@ -126,13 +171,13 @@ fi
 
 if [ "$HERMES_NONINTERACTIVE" = "1" ]; then
     log "Running 'hermes install'"
-    hermes install
+    run_hermes_install
 else
     log "Setup complete."
     printf 'Run "hermes install" now? [y/N] '
     read -r ans || ans=n
     case "$ans" in
-        y|Y) hermes install ;;
+        y|Y) run_hermes_install ;;
         *)   log "Skipped. Run 'hermes install' when ready." ;;
     esac
 fi
