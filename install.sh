@@ -88,9 +88,16 @@ fi
 
 if [ -d "$HERMES_HOME_DIR/.git" ]; then
     log "Updating existing checkout at $HERMES_HOME_DIR"
+    # The clone is a tool-installer mirror, not a dev branch — force it to
+    # match origin. `pull --ff-only` would silently fail here for two reasons:
+    #   1. `--depth 1` clones create graft points; subsequent shallow fetches
+    #      can leave local and origin with no visible common ancestor, so git
+    #      reports the branches as "diverged" even when they are linear.
+    #   2. Any local edit would block a fast-forward.
+    # `fetch + reset --hard` sidesteps both and is the right semantics for an
+    # installer that owns this directory.
     git -C "$HERMES_HOME_DIR" fetch --depth 1 origin "$HERMES_REPO_REF"
-    git -C "$HERMES_HOME_DIR" checkout "$HERMES_REPO_REF"
-    git -C "$HERMES_HOME_DIR" pull --ff-only origin "$HERMES_REPO_REF" || true
+    git -C "$HERMES_HOME_DIR" reset --hard "origin/$HERMES_REPO_REF"
 else
     log "Cloning $HERMES_REPO_URL → $HERMES_HOME_DIR"
     git clone --depth 1 --branch "$HERMES_REPO_REF" "$HERMES_REPO_URL" "$HERMES_HOME_DIR"
@@ -109,7 +116,10 @@ MANIFEST_ROOT=""   # empty → factory; non-empty → `--manifest-dir $MANIFEST_
 if [ -n "${HERMES_CONFIG_URL:-}" ]; then
     if [ -d "$HERMES_CONFIG_DIR/.git" ]; then
         log "Updating existing config at $HERMES_CONFIG_DIR"
-        git -C "$HERMES_CONFIG_DIR" pull --ff-only || true
+        # Config repo is user-owned (may have local commits); ff-only respects
+        # that. Surface failures rather than silently using a stale checkout.
+        git -C "$HERMES_CONFIG_DIR" pull --ff-only \
+            || warn "could not fast-forward $HERMES_CONFIG_DIR — install will use the current checkout. Reconcile manually if needed."
     else
         log "Cloning $HERMES_CONFIG_URL → $HERMES_CONFIG_DIR"
         git clone --depth 1 "$HERMES_CONFIG_URL" "$HERMES_CONFIG_DIR"

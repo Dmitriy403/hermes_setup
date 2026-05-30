@@ -22,6 +22,30 @@ def test_install_sh_syntax():
     subprocess.run(["bash", "-n", str(INSTALL_SH)], check=True)
 
 
+def test_install_sh_existing_checkout_uses_reset_hard():
+    """`pull --ff-only` silently fails on shallow-clone graft points, leaving
+    the tool clone on stale code; the installer owns this directory and must
+    force-sync it to origin via `reset --hard` instead."""
+    body = INSTALL_SH.read_text()
+    assert 'reset --hard "origin/$HERMES_REPO_REF"' in body, "reset --hard missing"
+    # Any remaining `pull --ff-only` is for the user-owned config repo and
+    # must surface failures rather than `|| true` them.
+    lines = body.splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        if stripped.startswith("#") or "pull --ff-only" not in stripped:
+            continue
+        # The invocation must NOT end with `|| true` (silent), but should fall
+        # through to a `warn` (either on the same line or continued via `\`).
+        joined = stripped
+        j = i
+        while joined.rstrip().endswith("\\") and j + 1 < len(lines):
+            j += 1
+            joined = joined.rstrip()[:-1] + " " + lines[j].lstrip()
+        assert "|| true" not in joined, f"silent ff-only pull: {joined!r}"
+        assert "warn" in joined, f"ff-only pull must surface failure: {joined!r}"
+
+
 def _write_stub(path: Path, body: str) -> None:
     path.write_text(body)
     path.chmod(0o755)
