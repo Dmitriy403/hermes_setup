@@ -9,6 +9,7 @@ v1 (Decision: avoids a hard dependency on `claude mcp add`).
 
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import shutil
@@ -42,12 +43,36 @@ class InstallError(Exception):
 class Mutator:
     dry_run: bool
     log: list[str] = field(default_factory=list)
+    # When True (via `hermes install --confirm`), every overwrite of an
+    # existing file prints a unified diff and prompts y/N on stdin. In
+    # dry-run mode the diff is appended to the log automatically (no prompt).
+    confirm: bool = False
+
+    def _record_diff_and_maybe_skip(self, name: str, current: str, new: str) -> bool:
+        """Append a unified diff to the log. With confirm=True, prompt y/N.
+        Returns True if the caller should proceed with the write."""
+        diff = "".join(difflib.unified_diff(
+            current.splitlines(keepends=True),
+            new.splitlines(keepends=True),
+            fromfile=f"a/{name}", tofile=f"b/{name}", n=3))
+        self.log.append(f"diff: {name}\n{diff.rstrip()}")
+        if not self.confirm or self.dry_run:
+            return True
+        sys.stderr.write(diff)
+        ans = input(f"overwrite {name}? [y/N] ").strip().lower()
+        if ans == "y":
+            return True
+        self.log.append(f"skipped: {name} (declined)")
+        return False
 
     def write_text(self, path: Path, content: str, *, mode: int | None = None, label: str | None = None) -> None:
         name = label or str(path)
         if path.exists() and path.read_text() == content:
             self.log.append(f"unchanged: {name}")
             return
+        if path.exists() and (self.dry_run or self.confirm):
+            if not self._record_diff_and_maybe_skip(name, path.read_text(), content):
+                return
         verb = "would write" if self.dry_run else "write"
         self.log.append(f"{verb}: {name}")
         if self.dry_run:
@@ -72,6 +97,19 @@ class Mutator:
         if dst.exists() and src.exists() and dst.read_bytes() == src.read_bytes():
             self.log.append(f"unchanged: {name}")
             return
+        if dst.exists() and (self.dry_run or self.confirm):
+            try:
+                cur, new = dst.read_text(), src.read_text()
+                if not self._record_diff_and_maybe_skip(name, cur, new):
+                    return
+            except UnicodeDecodeError:
+                # binary file — no unified diff, just note that it would change
+                self.log.append(f"diff: {name} (binary differs)")
+                if self.confirm and not self.dry_run:
+                    sys.stderr.write(f"{name} differs (binary)\n")
+                    if input(f"overwrite {name}? [y/N] ").strip().lower() != "y":
+                        self.log.append(f"skipped: {name} (declined)")
+                        return
         verb = "would copy" if self.dry_run else "copy"
         self.log.append(f"{verb}: {name}")
         if not self.dry_run:
@@ -384,7 +422,8 @@ class InstallResult:
 
 
 def install(config_root: str | Path | None = None, home: str | Path | None = None,
-            *, tool_root: str | Path | None = None, dry_run: bool = False) -> InstallResult:
+            *, tool_root: str | Path | None = None, dry_run: bool = False,
+            confirm: bool = False) -> InstallResult:
     cfg = Path(config_root) if config_root else paths.config_root()
     tool = Path(tool_root) if tool_root else paths.tool_root()
     home_path = Path(home).expanduser() if home else Path.home()
@@ -394,7 +433,7 @@ def install(config_root: str | Path | None = None, home: str | Path | None = Non
     manifest = step_validate(cfg)
     step_probe_check(tool)
 
-    mut = Mutator(dry_run=dry_run)
+    mut = Mutator(dry_run=dry_run, confirm=confirm)
     step_runtime_dir(home_path, mut)
     step_claude_version(manifest, mut)
     step_files(cfg, claude, manifest, mut, home_path)

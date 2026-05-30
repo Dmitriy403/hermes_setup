@@ -108,13 +108,20 @@ def _install_cmd(argv: list[str]) -> int:
                                 description="Replay the manifest onto this machine.")
     p.add_argument("--dry-run", action="store_true", help="print actions without writing")
     p.add_argument("--manifest-dir", help="config repo root (default: HERMES_MANIFEST_DIR or the tool's manifest/)")
+    p.add_argument("--confirm", action="store_true",
+                   help="show a unified diff and prompt y/N before overwriting any existing file")
     try:
         args = p.parse_args(argv)
     except SystemExit:
         return 64
 
+    if args.confirm and not sys.stdin.isatty():
+        print("--confirm requires an interactive terminal", file=sys.stderr)
+        return 64
+
     try:
-        result = install(config_root=args.manifest_dir, dry_run=args.dry_run)
+        result = install(config_root=args.manifest_dir, dry_run=args.dry_run,
+                         confirm=args.confirm)
     except (InstallError, ManifestError) as exc:
         print(f"install aborted: {exc}", file=sys.stderr)
         return 1
