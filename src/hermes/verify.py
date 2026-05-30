@@ -213,10 +213,11 @@ def _verify_brew_deps(config_root: Path, manifest: Manifest) -> list[DriftRecord
     for info in _registered(config_root, manifest):
         if not info.brew_deps:
             continue
-        missing = [b for b in info.brew_deps if which(b) is None]
-        if missing:
+        pairs = [plugins_registry.parse_brew_dep(d) for d in info.brew_deps]
+        missing_formulas = [f for (f, b) in pairs if which(b) is None]
+        if missing_formulas:
             records.append(DriftRecord("brew-deps", info.name, "missing",
-                                       f"`brew install {' '.join(missing)}`"))
+                                       f"`brew install {' '.join(missing_formulas)}`"))
         else:
             records.append(DriftRecord("brew-deps", info.name, "match"))
     return records

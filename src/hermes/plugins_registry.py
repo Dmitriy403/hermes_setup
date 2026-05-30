@@ -28,8 +28,11 @@ class PluginInfo:
     kind: str                 # "mcp" | "skill" | "cli"
     console_scripts: tuple[str, ...] = ()
     launchd: LaunchdJob | None = None
-    # Brew-installable binaries the plugin shells out to (fail-soft at runtime
-    # per Decision 18; install surfaces them up front via `brew install <pkg>`).
+    # Brew dependencies the plugin shells out to (fail-soft at runtime per
+    # Decision 18; install surfaces them up front via `brew install <pkg>`).
+    # Each entry is `"formula"` (binary name == formula) or `"formula:binary"`
+    # when they differ — e.g. `"whisper-cpp:whisper-cli"`. `parse_brew_dep`
+    # returns the pair.
     brew_deps: tuple[str, ...] = ()
 
 
@@ -48,7 +51,9 @@ REGISTRY: dict[str, PluginInfo] = {
     "voice": PluginInfo(
         name="voice", rel_dir="plugins/voice", kind="mcp",
         console_scripts=("hermes-voice",),
-        brew_deps=("whisper-cpp", "ffmpeg")),
+        # `whisper-cpp` formula installs the binary as `whisper-cli` — surface
+        # the formula name to the user but probe for the right binary.
+        brew_deps=("whisper-cpp:whisper-cli", "ffmpeg")),
     "backups": PluginInfo(
         name="backups", rel_dir="plugins/backups", kind="cli",
         console_scripts=("hermes-backup",),
@@ -62,6 +67,17 @@ REGISTRY: dict[str, PluginInfo] = {
                                      "AWS_SECRET_ACCESS_KEY", "B2_ACCOUNT_ID",
                                      "B2_ACCOUNT_KEY"))),
 }
+
+
+def parse_brew_dep(spec: str) -> tuple[str, str]:
+    """Return (formula, binary). `formula` is what the user types in
+    `brew install`; `binary` is what `which()` looks for. They differ when a
+    formula renames its installed executable (e.g. `whisper-cpp` → `whisper-cli`).
+    """
+    if ":" in spec:
+        formula, binary = spec.split(":", 1)
+        return formula, binary
+    return spec, spec
 
 
 def get(name: str) -> PluginInfo | None:

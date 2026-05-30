@@ -314,10 +314,13 @@ def step_plugin_brew_deps(config_root: Path, manifest: Manifest, mut: Mutator) -
     for info in _registered_plugins(config_root, manifest):
         if not info.brew_deps:
             continue
-        missing = [b for b in info.brew_deps if which(b) is None]
-        if missing:
+        # parse each "formula" or "formula:binary"; warn with formula names,
+        # probe with binary names (they differ for e.g. whisper-cpp/whisper-cli).
+        pairs = [plugins_registry.parse_brew_dep(d) for d in info.brew_deps]
+        missing_formulas = [f for (f, b) in pairs if which(b) is None]
+        if missing_formulas:
             mut.log.append(
-                f"warn: plugin {info.name} pre-reqs missing — `brew install {' '.join(missing)}`")
+                f"warn: plugin {info.name} pre-reqs missing — `brew install {' '.join(missing_formulas)}`")
 
 
 def step_plugin_packages(tool_root: Path, config_root: Path, manifest: Manifest, mut: Mutator) -> None:
@@ -333,9 +336,13 @@ def step_plugin_packages(tool_root: Path, config_root: Path, manifest: Manifest,
             continue
         plugin_dir = str(tool_root / info.rel_dir)
         if pipx:
-            # --include-apps puts the console-script on PATH (~/.local/bin) so
-            # MCP commands resolve and `hermes verify` doesn't see false drift.
-            mut.run([pipx, "inject", "hermes", plugin_dir, "--include-apps"],
+            # --include-apps puts the console-script on PATH (~/.local/bin)
+            # so MCP commands resolve and `hermes verify` doesn't see false
+            # drift. --force makes the inject re-link: without it, pipx skips
+            # already-injected packages and silently ignores --include-apps,
+            # leaving venv-bin scripts un-symlinked. We only reach this branch
+            # when which(<console-script>) is None, so re-doing it is correct.
+            mut.run([pipx, "inject", "hermes", plugin_dir, "--include-apps", "--force"],
                     label=f"pipx inject {info.name}")
         else:
             mut.run([sys.executable, "-m", "pip", "install", plugin_dir],

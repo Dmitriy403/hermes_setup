@@ -238,6 +238,79 @@ def test_verify_emits_brew_deps_drift_for_voice():
     assert bd[0].status == "missing" and "whisper-cpp" in (bd[0].detail or "")
 
 
+# ---- 18.11 factory must NOT opt into backups from a .example starter ----
+
+def test_factory_does_not_register_backups_when_only_example_present():
+    """Renaming the public starter to `manifest/backups.yaml.example` removes
+    the false opt-in: `_registered_plugins` only treats a REAL backups.yaml
+    as an opt-in signal."""
+    with tempfile.TemporaryDirectory() as d:
+        repo = Path(d) / "repo"; repo.mkdir()
+        _factory_repo(repo, ("macos-control", "voice"))
+        # .example present but no real backups.yaml — must NOT trigger opt-in.
+        (repo / "manifest" / "backups.yaml.example").write_text("# starter\n")
+        m = Manifest.load(repo)
+        from hermes.install.installer import _registered_plugins
+        names = {p.name for p in _registered_plugins(repo, m)}
+    assert "backups" not in names, names
+    assert names == {"macos-control", "voice"}
+
+
+# ---- 18.12 brew_deps formula:binary split ----
+
+def test_parse_brew_dep_formula_only_and_with_binary():
+    assert reg.parse_brew_dep("ffmpeg") == ("ffmpeg", "ffmpeg")
+    assert reg.parse_brew_dep("whisper-cpp:whisper-cli") == ("whisper-cpp", "whisper-cli")
+
+
+def test_brew_deps_check_uses_binary_warning_uses_formula():
+    """When the formula and binary differ, drift must clear once the BINARY
+    exists, and the warning must point the user at the FORMULA."""
+    with tempfile.TemporaryDirectory() as d:
+        dd = Path(d)
+        repo = dd / "repo"; repo.mkdir()
+        _factory_repo(repo, ("voice",))
+        # Provide stubs for the *binaries* voice probes: whisper-cli + ffmpeg.
+        binp = dd / "fakebin"; binp.mkdir()
+        for name in ("whisper-cli", "ffmpeg"):
+            stub = binp / name
+            stub.write_text("#!/bin/sh\nexit 0\n")
+            stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+        prev = os.environ["PATH"]
+        os.environ["PATH"] = f"{binp}{os.pathsep}{prev}"
+        try:
+            records = verify(config_root=repo, home=dd / "home", tool_root=repo)
+        finally:
+            os.environ["PATH"] = prev
+    bd = next(r for r in records if r.component == "brew-deps" and r.name == "voice")
+    assert bd.status == "match", bd
+
+    # Same setup but NO binaries on PATH — must say `brew install whisper-cpp`
+    # (the FORMULA name), not `brew install whisper-cli` (the binary).
+    with tempfile.TemporaryDirectory() as d:
+        repo = Path(d) / "repo"; repo.mkdir()
+        _factory_repo(repo, ("voice",))
+        with _empty_path(Path(d)):
+            records = verify(config_root=repo, home=Path(d) / "home", tool_root=repo)
+    bd = next(r for r in records if r.component == "brew-deps" and r.name == "voice")
+    assert bd.status == "missing"
+    assert "whisper-cpp" in (bd.detail or "")
+    assert "whisper-cli" not in (bd.detail or ""), bd.detail  # binary stays internal
+
+
+# ---- 18.13 pipx inject must use --force --include-apps ----
+
+def test_pipx_inject_passes_force_and_include_apps():
+    """Without --force, pipx skips already-injected packages and silently
+    ignores --include-apps — leaving venv-bin scripts un-symlinked to
+    ~/.local/bin. Both flags must appear in the inject argv."""
+    import inspect
+    from hermes.install.installer import step_plugin_packages
+    src = inspect.getsource(step_plugin_packages)
+    assert '"--include-apps"' in src, src
+    assert '"--force"' in src, src
+
+
 def _run_standalone() -> int:
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
