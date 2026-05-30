@@ -70,10 +70,12 @@ def test_verify_detects_modified_file():
         d = Path(d)
         src, repo, tgt = _setup(d)
         install(config_root=repo, home=tgt, tool_root=repo)
-        # Tamper with the installed CLAUDE.md.
-        (tgt / ".claude" / "CLAUDE.md").write_text("# tampered\n")
+        # Tamper with the installed skill file (the remaining `verbatim`
+        # surface — CLAUDE.md is no longer managed by hermes).
+        skill_md = tgt / ".claude" / "skills" / "foo" / "SKILL.md"
+        skill_md.write_text("# tampered\n")
         records = verify(config_root=repo, home=tgt, tool_root=repo)
-        cm = next(r for r in records if r.component == "claude_md")
+        cm = next(r for r in records if r.component == "skill" and r.name == "foo")
         assert cm.status == "modified", cm
 
 

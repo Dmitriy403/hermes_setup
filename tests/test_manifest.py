@@ -40,7 +40,6 @@ def _sample() -> Manifest:
         ],
         commands=["foo", "bar"],
         hooks=["stop.sh"],
-        has_claude_md=True,
         has_settings=True,
         has_keybindings=False,
     )
@@ -63,7 +62,7 @@ def test_round_trip_is_fixed_point():
     assert {s.name for s in loaded.mcp_servers} == {s.name for s in m.mcp_servers}
     assert {p.name for p in loaded.plugins} == {p.name for p in m.plugins}
     assert sorted(loaded.commands) == sorted(m.commands)
-    assert loaded.has_claude_md and loaded.has_settings and not loaded.has_keybindings
+    assert loaded.has_settings and not loaded.has_keybindings
     # MCP env placeholder survives round-trip unresolved.
     tg = next(s for s in loaded.mcp_servers if s.name == "telegram-bot")
     assert tg.env["TELEGRAM_BOT_TOKEN"] == "${TELEGRAM_BOT_TOKEN}"

@@ -25,7 +25,7 @@ try:
 except ImportError:  # pragma: no cover
     _yaml = None
 
-COMPONENTS = ("claude_md", "settings", "keybindings", "commands",
+COMPONENTS = ("settings", "keybindings", "commands",
               "skills", "plugins", "mcp", "hooks")
 
 
@@ -56,16 +56,6 @@ def _claude_version() -> str | None:
 
 
 # ---- per-component capture ----
-
-
-def capture_claude_md(claude: Path, mdir: Path, *, dry_run: bool, log: list[str]) -> bool:
-    src = claude / "CLAUDE.md"
-    if not src.exists():
-        return False
-    log.append(f"copy {src} -> manifest/CLAUDE.md")
-    if not dry_run:
-        shutil.copy2(src, mdir / "CLAUDE.md")
-    return True
 
 
 def capture_settings(claude: Path, mdir: Path, redactor: Redactor, *, dry_run: bool,
@@ -234,8 +224,6 @@ def capture(
     if _selected("settings", only, skip):
         manifest.has_settings, settings_data = capture_settings(
             claude, mdir, redactor, dry_run=dry_run, log=log, home=home)
-    if _selected("claude_md", only, skip):
-        manifest.has_claude_md = capture_claude_md(claude, mdir, dry_run=dry_run, log=log)
     if _selected("keybindings", only, skip):
         manifest.has_keybindings = capture_keybindings(claude, mdir, dry_run=dry_run, log=log)
     if _selected("commands", only, skip):

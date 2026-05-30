@@ -23,6 +23,5 @@ mcp_servers:
 commands: []
 hooks: []
 files:
-  claude_md: false
   settings: false
   keybindings: false

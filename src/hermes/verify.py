@@ -266,7 +266,7 @@ def verify(config_root: str | Path | None = None, home: str | Path | None = None
 
     mdir = cfg / "manifest"
     records: list[DriftRecord] = []
-    records += _verify_verbatim("claude_md", mdir / "CLAUDE.md", claude / "CLAUDE.md", manifest.has_claude_md)
+    # CLAUDE.md is no longer tracked (user-managed; see manifest.py).
     records += _verify_verbatim("keybindings", mdir / "keybindings.json",
                                 claude / "keybindings.json", manifest.has_keybindings)
     records += _verify_settings(cfg, claude, resolved, home_path)

@@ -77,7 +77,8 @@ def test_install_round_trip_and_idempotent():
         os.environ.pop("TELEGRAM_BOT_TOKEN", None)
         result = install(config_root=repo, home=tgt, tool_root=repo)
         tclaude = tgt / ".claude"
-        assert (tclaude / "CLAUDE.md").read_text() == "# global\n"
+        # CLAUDE.md is intentionally NOT installed (user-managed).
+        assert not (tclaude / "CLAUDE.md").exists()
         assert (tclaude / "skills" / "foo" / "SKILL.md").exists()
         # settings.json has mcpServers with the RESOLVED token (from secrets.env).
         settings = json.loads((tclaude / "settings.json").read_text())

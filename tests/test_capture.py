@@ -77,7 +77,9 @@ def test_capture_basic_and_no_secret_leak():
 
         # Manifest loads and reflects the source.
         m = Manifest.load(repo)
-        assert m.has_claude_md and m.has_settings
+        assert m.has_settings
+        # CLAUDE.md is user-managed and intentionally not captured.
+        assert not (repo / "manifest" / "CLAUDE.md").exists()
         assert {s.name for s in m.skills} == {"foo"}
         assert next(s for s in m.skills if s.name == "foo").source == "local"
         assert {p.name for p in m.plugins} == {"mempalace"}
@@ -130,7 +132,6 @@ def test_capture_only_and_skip():
         m = Manifest.load(repo)
         assert {s.name for s in m.skills} == {"foo"}
         assert m.plugins == []  # plugins skipped
-        assert not m.has_claude_md  # claude_md skipped
 
 
 def _run_standalone() -> int:

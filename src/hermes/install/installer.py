@@ -215,8 +215,7 @@ def _build_settings(config_root: Path, manifest: Manifest, home: Path) -> dict[s
 
 def step_files(config_root: Path, claude: Path, manifest: Manifest, mut: Mutator, home: Path) -> None:
     mdir = config_root / "manifest"
-    if manifest.has_claude_md and (mdir / "CLAUDE.md").exists():
-        mut.copy_file(mdir / "CLAUDE.md", claude / "CLAUDE.md", label="~/.claude/CLAUDE.md")
+    # CLAUDE.md is intentionally NOT installed (user-managed; see manifest.py).
     if manifest.has_keybindings and (mdir / "keybindings.json").exists():
         mut.copy_file(mdir / "keybindings.json", claude / "keybindings.json",
                       label="~/.claude/keybindings.json")

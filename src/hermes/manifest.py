@@ -1,10 +1,9 @@
 """Manifest schema (schema_version 1) and lossless load/save.
 
-Layout (Decision 2 in design.md):
+Layout (Decision 2 in design.md, with CLAUDE.md reversal):
 
     manifest/
       hermes.yaml          root index + version pins + inline lists
-      CLAUDE.md            verbatim (presence flagged in root)
       settings.json        redacted copy (presence flagged)
       keybindings.json     verbatim, optional
       plugins.yaml         list of {name, marketplace, version}
@@ -12,6 +11,9 @@ Layout (Decision 2 in design.md):
       mcp/<name>.yaml      command/args/env (env values may be ${VAR})
       commands/            verbatim command files
       hooks/               hook scripts referenced from settings.json
+
+CLAUDE.md is NOT managed (was: verbatim copy). It's user prose that evolves
+outside the bootstrap surface; users sync it themselves (dotfiles, iCloud).
 
 Load → save → load is a fixed point: lists are sorted by name and YAML is
 dumped deterministically so re-capture produces minimal diffs.
@@ -116,7 +118,11 @@ class Manifest:
     mcp_servers: list[McpServer] = field(default_factory=list)
     commands: list[str] = field(default_factory=list)
     hooks: list[str] = field(default_factory=list)
-    has_claude_md: bool = False
+    # NOTE: CLAUDE.md is no longer managed by hermes (was: `has_claude_md`).
+    # Reversed part of archived Decision 2 — CLAUDE.md is user prose that
+    # evolves outside the bootstrap surface; users sync it themselves
+    # (dotfiles repo, iCloud, manual). The `files.claude_md` key in old
+    # manifests is silently ignored on load (see load()).
     has_settings: bool = False
     has_keybindings: bool = False
     doctor_on_session_start: bool = False
@@ -171,7 +177,7 @@ class Manifest:
         m.commands = list(raw.get("commands", []) or [])
         m.hooks = list(raw.get("hooks", []) or [])
         files = raw.get("files", {}) or {}
-        m.has_claude_md = bool(files.get("claude_md", False))
+        # files.claude_md is intentionally ignored (no longer managed).
         m.has_settings = bool(files.get("settings", False))
         m.has_keybindings = bool(files.get("keybindings", False))
         hooks_cfg = raw.get("hooks_config", {}) or {}
@@ -201,7 +207,6 @@ class Manifest:
         root_doc["commands"] = sorted(self.commands)
         root_doc["hooks"] = sorted(self.hooks)
         root_doc["files"] = {
-            "claude_md": self.has_claude_md,
             "settings": self.has_settings,
             "keybindings": self.has_keybindings,
         }
@@ -304,7 +309,6 @@ def resolve_manifest_env(
         mcp_servers=new_servers,
         commands=list(manifest.commands),
         hooks=list(manifest.hooks),
-        has_claude_md=manifest.has_claude_md,
         has_settings=manifest.has_settings,
         has_keybindings=manifest.has_keybindings,
         doctor_on_session_start=manifest.doctor_on_session_start,
