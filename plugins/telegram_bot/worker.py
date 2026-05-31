@@ -2,8 +2,10 @@
 
 Live edge: lazily uses python-telegram-bot. Filters on the allowlist BEFORE
 normalizing/storing, so the buffer only ever holds allowlisted messages.
-Run standalone via launchd (`python -m telegram_bot.worker`) or as a thread
-inside the MCP server.
+Runs as a thread inside the MCP server (`server.py`). A previous design also
+shipped this as a launchd job, but two pollers fight for getUpdates (Telegram
+returns 409 Conflict on the second client) — see the telegram-bot entry note
+in src/hermes/plugins_registry.py.
 """
 
 from __future__ import annotations

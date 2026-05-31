@@ -30,8 +30,14 @@ and every outbound `chat_id` is re-validated against the allowlist on each call.
 ## Run
 
 Registered as the `telegram-bot` MCP server (`manifest/mcp/telegram-bot.yaml`).
-`hermes install` installs a launchd agent (`com.hermes.telegram-bot`) so the
-long-poll worker runs at login and restarts on crash.
+Claude Code launches the server (`hermes-telegram-bot`) on start and the
+server spawns its own long-poll worker in a background thread. Messages that
+arrive while Claude is closed stay in Telegram's Bot API queue (~24 h) and
+are consumed when Claude starts again.
+
+There is no separate launchd job — a second poller racing with the in-server
+worker produced `409 Conflict: terminated by other getUpdates request`. See
+the `telegram-bot` entry note in `src/hermes/plugins_registry.py`.
 
 Requires `python-telegram-bot` (declared in this plugin's `pyproject.toml`).
 

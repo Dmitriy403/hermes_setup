@@ -42,12 +42,17 @@ REGISTRY: dict[str, PluginInfo] = {
     "macos-control": PluginInfo(
         name="macos-control", rel_dir="plugins/macos_control", kind="mcp",
         console_scripts=("hermes-macos-control",)),
+    # NOTE: NO launchd job. The MCP server entry (hermes-telegram-bot,
+    # launched by Claude Code from settings.json mcpServers) already spawns
+    # its own long-poll worker in a background thread. A second launchd-side
+    # worker raced for getUpdates with the Bot API allowing only one —
+    # every invocation produced "409 Conflict: terminated by other
+    # getUpdates request". Telegram itself queues incoming messages while
+    # Claude is closed (Bot API update history ~24h), so dropping the
+    # launchd worker only changes *when* messages get ingested, not whether.
     "telegram-bot": PluginInfo(
         name="telegram-bot", rel_dir="plugins/telegram_bot", kind="mcp",
-        console_scripts=("hermes-telegram-bot",),
-        launchd=LaunchdJob(label="com.hermes.telegram-bot",
-                           module="telegram_bot.worker", keep_alive=True,
-                           env_keys=("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_CHAT_IDS"))),
+        console_scripts=("hermes-telegram-bot",)),
     "voice": PluginInfo(
         name="voice", rel_dir="plugins/voice", kind="mcp",
         console_scripts=("hermes-voice",),

@@ -33,7 +33,10 @@ _TG = "123456789:AAEdefGhIjKlMnOpQrStUvWxYz012345678"
 
 def test_registry_maps_known_plugins():
     assert reg.get("telegram-bot").rel_dir == "plugins/telegram_bot"
-    assert reg.get("telegram-bot").launchd.label == "com.hermes.telegram-bot"
+    # telegram-bot intentionally has no launchd job: the MCP server spawns
+    # its own long-poll worker; a second launchd-side poller races on
+    # getUpdates and gets 409 Conflict.
+    assert reg.get("telegram-bot").launchd is None
     assert reg.get("backups").launchd.start_interval == 3600
     assert reg.get("vision").kind == "skill"
     assert reg.installable(reg.get("macos-control")) is True
@@ -66,7 +69,6 @@ def test_agent_plist_injects_env():
 
 def test_registry_declares_secret_env_keys():
     assert "RESTIC_PASSWORD" in reg.get("backups").launchd.env_keys
-    assert "TELEGRAM_BOT_TOKEN" in reg.get("telegram-bot").launchd.env_keys
 
 
 # ---- 5.3 step_launchd_jobs embeds secrets into the plist ----
@@ -109,7 +111,9 @@ def test_launchd_job_embeds_secret_and_config_dir():
 
 # ---- 5.2/5.3 install wires inject + launchd (dry-run) ----
 
-def _repo_with_telegram(repo: Path) -> None:
+def _repo_with_telegram_and_backups(repo: Path) -> None:
+    """Stage telegram-bot (mcp, no launchd) AND backups (cli, launchd) so
+    install/verify exercise both the no-launchd plugin and a launchd one."""
     m = Manifest(mcp_servers=[McpServer(
         "telegram-bot", "hermes-telegram-bot", [],
         {"TELEGRAM_BOT_TOKEN": "${TELEGRAM_BOT_TOKEN}",
@@ -120,8 +124,14 @@ def _repo_with_telegram(repo: Path) -> None:
     probe.write_text("#!/bin/sh\n")
     probe.chmod(probe.stat().st_mode | stat.S_IXUSR)
     (repo / "manifest" / "permissions.yaml").write_text("schema_version: 1\n")
+    (repo / "manifest" / "backups.yaml").write_text(
+        "schema_version: 1\nsources: [\"~/x\"]\ndestination: {kind: local, path: ~/backups}\n")
     (repo / "secrets.env").write_text(
-        f"TELEGRAM_BOT_TOKEN={_TG}\nTELEGRAM_ALLOWED_CHAT_IDS=1\n")
+        f"TELEGRAM_BOT_TOKEN={_TG}\nTELEGRAM_ALLOWED_CHAT_IDS=1\nRESTIC_PASSWORD=p\n")
+
+
+# Backwards-compat name kept for the few callers that still use it.
+_repo_with_telegram = _repo_with_telegram_and_backups
 
 
 @contextlib.contextmanager
@@ -141,17 +151,19 @@ def test_install_dry_run_injects_and_loads():
     with tempfile.TemporaryDirectory() as d:
         repo, tgt = Path(d) / "repo", Path(d) / "tgt"
         repo.mkdir(); tgt.mkdir()
-        _repo_with_telegram(repo)
+        _repo_with_telegram_and_backups(repo)
         os.environ.pop("TELEGRAM_BOT_TOKEN", None)
         os.environ.pop("TELEGRAM_ALLOWED_CHAT_IDS", None)
         with _empty_path(Path(d)):  # console-script absent → install must inject
             res = install(config_root=repo, home=tgt, tool_root=repo, dry_run=True)
         log = "\n".join(res.actions)
-        # plugin package injected (pipx present on dev machine → inject; else pip)
-        assert ("pipx inject telegram-bot" in log) or ("pip install telegram-bot" in log), log
-        # launchd plist written + loaded
-        assert "com.hermes.telegram-bot.plist" in log
-        assert "launchctl load com.hermes.telegram-bot" in log
+        # plugin packages: telegram-bot (mcp) AND backups (cli) injected.
+        for name in ("telegram-bot", "backups"):
+            assert (f"pipx inject {name}" in log) or (f"pip install {name}" in log), log
+        # backups has a launchd job; telegram-bot intentionally does NOT.
+        assert "com.hermes.backup.plist" in log
+        assert "launchctl load com.hermes.backup" in log
+        assert "com.hermes.telegram-bot" not in log, "telegram-bot must not get a launchd job"
         # dry-run wrote nothing
         assert not (tgt / "Library" / "LaunchAgents").exists()
 
@@ -162,15 +174,18 @@ def test_verify_flags_missing_package_and_launchd():
     with tempfile.TemporaryDirectory() as d:
         repo, tgt = Path(d) / "repo", Path(d) / "tgt"
         repo.mkdir(); tgt.mkdir()
-        _repo_with_telegram(repo)
+        _repo_with_telegram_and_backups(repo)
         os.environ.pop("TELEGRAM_BOT_TOKEN", None)
         os.environ.pop("TELEGRAM_ALLOWED_CHAT_IDS", None)
-        with _empty_path(Path(d)):  # ensure hermes-telegram-bot isn't found on PATH
+        with _empty_path(Path(d)):  # ensure hermes-* scripts not on PATH
             records = verify(config_root=repo, home=tgt, tool_root=repo)
         pkg = next(r for r in records if r.component == "plugin-package" and r.name == "telegram-bot")
         assert pkg.status == "missing"          # hermes-telegram-bot not on PATH
-        ld = next(r for r in records if r.component == "launchd" and r.name == "com.hermes.telegram-bot")
-        assert ld.status == "missing"           # no plist installed
+        # backups is the launchd-bearing plugin now; its plist is absent on tgt.
+        ld = next(r for r in records if r.component == "launchd" and r.name == "com.hermes.backup")
+        assert ld.status == "missing"
+        # telegram-bot must NOT appear as a launchd component at all.
+        assert not any(r.component == "launchd" and r.name == "com.hermes.telegram-bot" for r in records)
 
 
 # ---- 18.6/18.7 factory install + brew_deps surfacing ----

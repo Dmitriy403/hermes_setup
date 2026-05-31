@@ -14,7 +14,7 @@ from pathlib import Path
 # telegram_bot is a package under plugins/ with relative imports → import as pkg
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "plugins"))
 
-from telegram_bot import core, launchd  # noqa: E402
+from telegram_bot import core  # noqa: E402
 from telegram_bot.tools import TelegramTools  # noqa: E402
 
 
@@ -154,14 +154,6 @@ def test_send_to_non_allowlisted_refused_and_not_sent():
 
 
 # ---- launchd ----
-
-def test_launchd_plist():
-    xml = launchd.generate_plist("com.test", ["/usr/bin/python3", "-m", "x"], stderr_path="/tmp/e.log")
-    assert "<key>Label</key>" in xml and "com.test" in xml
-    assert "KeepAlive" in xml and "/tmp/e.log" in xml
-    tg = launchd.telegram_plist("/usr/bin/python3")
-    assert "com.hermes.telegram-bot" in tg and "telegram_bot.worker" in tg
-
 
 def _run_standalone() -> int:
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
