@@ -96,17 +96,24 @@ class McpServer:
     command: str
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
+    # Optional `claude mcp add` scope override ("local" | "user" | "project").
+    # None = let install pick (local for polling/launchd servers, user otherwise).
+    scope: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {"name": self.name, "command": self.command,
-                "args": list(self.args), "env": dict(self.env)}
+        d: dict[str, Any] = {"name": self.name, "command": self.command,
+                             "args": list(self.args), "env": dict(self.env)}
+        if self.scope is not None:
+            d["scope"] = self.scope
+        return d
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "McpServer":
         if "name" not in d or "command" not in d:
             raise ManifestError(f"mcp server missing name/command: {d!r}")
         return cls(name=d["name"], command=d["command"],
-                   args=list(d.get("args", [])), env=dict(d.get("env", {})))
+                   args=list(d.get("args", [])), env=dict(d.get("env", {})),
+                   scope=d.get("scope"))
 
 
 @dataclass
@@ -299,7 +306,8 @@ def resolve_manifest_env(
                     missing.append(var)
             new_env[k] = resolved
         new_servers.append(McpServer(name=server.name, command=server.command,
-                                     args=list(server.args), env=new_env))
+                                     args=list(server.args), env=new_env,
+                                     scope=server.scope))
 
     resolved_manifest = Manifest(
         schema_version=manifest.schema_version,

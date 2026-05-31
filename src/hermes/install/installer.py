@@ -3,8 +3,13 @@
 Fail-fast on missing secrets (before any write), idempotent (unchanged
 components are skipped), and dry-run capable (every mutation goes through a
 single Mutator). Verbatim files are written via staging temp + atomic
-rename. MCP servers are written into settings.json's `mcpServers` map for
-v1 (Decision: avoids a hard dependency on `claude mcp add`).
+rename.
+
+MCP servers are registered via `claude mcp add` (see step_mcp / mcp_cli) —
+NOT written into settings.json's `mcpServers` map. This reverses the v1
+decision: Claude Code loads MCP from ~/.claude.json / .mcp.json and silently
+ignores settings.json's mcpServers, so the v1 approach left every server dead.
+Registration fails soft when the `claude` CLI is absent.
 """
 
 from __future__ import annotations
@@ -22,8 +27,9 @@ from shutil import which
 from typing import Any
 
 from .. import paths, plugins_registry
-from ..manifest import Manifest, parse_secrets_env, resolve_manifest_env
+from ..manifest import Manifest, McpServer, parse_secrets_env, resolve_manifest_env
 from . import launchd as tool_launchd
+from . import mcp_cli
 from . import sandbox_profile
 
 try:
@@ -210,18 +216,20 @@ def _build_settings(config_root: Path, manifest: Manifest, home: Path) -> dict[s
     """
     repo_root = config_root
     settings_path = repo_root / "manifest" / "settings.json"
+    perms_path = repo_root / "manifest" / "permissions.yaml"
     settings: dict[str, Any] = {}
     if manifest.has_settings and settings_path.exists():
         settings = json.loads(settings_path.read_text())
-    elif not manifest.mcp_servers and not manifest.doctor_on_session_start:
+    elif not manifest.doctor_on_session_start and not perms_path.exists():
         return None
 
-    # MCP registration → settings.json mcpServers (v1 approach).
-    if manifest.mcp_servers:
-        settings["mcpServers"] = {
-            s.name: {"command": s.command, "args": list(s.args), "env": dict(s.env)}
-            for s in manifest.mcp_servers
-        }
+    # MCP servers are NO LONGER written into settings.json — Claude Code reads
+    # MCP from ~/.claude.json / .mcp.json and ignores settings.json's
+    # mcpServers map (this was a wrong v1 assumption). They are registered via
+    # `claude mcp add` in step_mcp. Strip any stale/captured `mcpServers` entry
+    # so install cleans up machines provisioned by older hermes versions
+    # (Layer A hook blocks below are left untouched).
+    settings.pop("mcpServers", None)
 
     # Opt-in SessionStart doctor hook (16.8): never blocks startup.
     if manifest.doctor_on_session_start:
@@ -236,7 +244,6 @@ def _build_settings(config_root: Path, manifest: Manifest, home: Path) -> dict[s
             session_start.append({"matcher": "", "hooks": [{"type": "command", "command": cmd}]})
 
     # Layer A PreToolUse enforcement hook (§14.4): only when permissions.yaml exists.
-    perms_path = repo_root / "manifest" / "permissions.yaml"
     if perms_path.exists():
         hooks = settings.setdefault("hooks", {})
         pre = hooks.setdefault("PreToolUse", [])
@@ -262,6 +269,56 @@ def step_files(config_root: Path, claude: Path, manifest: Manifest, mut: Mutator
         text = json.dumps(settings, indent=2, sort_keys=True) + "\n"
         text = paths.expand_home(text, home)  # ${HOME} -> target home
         mut.write_text(claude / "settings.json", text, label="~/.claude/settings.json")
+
+
+# Non-polling MCP servers default to user scope (available in every session).
+# Polling servers (e.g. telegram-bot, which long-polls getUpdates) set
+# `scope: local` in their manifest sidecar so only one poller runs per project
+# session — user scope would spawn a poller per session and hit Telegram's 409.
+_DEFAULT_MCP_SCOPE = "user"
+
+
+def _mcp_scope(server: McpServer) -> str:
+    return server.scope or _DEFAULT_MCP_SCOPE
+
+
+def step_mcp(config_root: Path, manifest: Manifest, home: Path, mut: Mutator) -> None:
+    """Register manifest MCP servers via `claude mcp add` (the location Claude
+    Code actually reads). Idempotent; secrets never appear in the log.
+
+    Fail-soft when the `claude` CLI is absent: surface the exact commands to
+    run by hand and continue the rest of the install.
+    """
+    if not manifest.mcp_servers:
+        return
+    binary = mcp_cli.claude_bin()
+    if not binary:
+        names = ", ".join(s.name for s in manifest.mcp_servers)
+        mut.log.append(f"  ! claude CLI absent — MCP servers not registered: {names}")
+        for s in manifest.mcp_servers:
+            cmd = mcp_cli.manual_add_command(
+                s.name, s.command, list(s.args), dict(s.env), _mcp_scope(s))
+            mut.log.append(f"      run manually: {cmd}")
+        return
+
+    cli = mcp_cli.McpCli(binary=binary, home=str(home), cwd=str(config_root))
+    for s in manifest.mcp_servers:
+        scope = _mcp_scope(s)
+        if scope not in mcp_cli.VALID_SCOPES:
+            mut.log.append(f"  ! mcp {s.name}: invalid scope {scope!r}, skipping")
+            continue
+        if cli.is_registered(s.name):
+            mut.log.append(f"unchanged: mcp {s.name} (already registered, scope={scope})")
+            continue
+        if mut.dry_run:
+            mut.log.append(f"would register: mcp {s.name} (scope={scope})")
+            continue
+        ok, msg = cli.add(s.name, s.command, list(s.args), dict(s.env), scope)
+        if ok:
+            mut.log.append(f"register: mcp {s.name} (scope={scope})")
+        else:
+            mut.log.append(f"  ! mcp {s.name}: registration failed ({msg}); "
+                           f"run manually: {mcp_cli.manual_add_command(s.name, s.command, list(s.args), dict(s.env), scope)}")
 
 
 def step_skills(repo_root: Path, claude: Path, manifest: Manifest, mut: Mutator) -> None:
@@ -443,6 +500,7 @@ def install(config_root: str | Path | None = None, home: str | Path | None = Non
     step_layer_b(cfg, home_path, mut)
     step_plugin_brew_deps(cfg, manifest, mut)
     step_plugin_packages(tool, cfg, manifest, mut)
+    step_mcp(cfg, manifest, home_path, mut)
     step_launchd_jobs(tool, cfg, home_path, manifest, mut)
 
     return InstallResult(actions=mut.log)

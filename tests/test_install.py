@@ -14,7 +14,9 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from fake_claude import write_fake_claude  # noqa: E402
 from hermes.capture import capture  # noqa: E402
 from hermes.install.installer import InstallError, install  # noqa: E402
 
@@ -47,6 +49,9 @@ def _make_repo(repo: Path, src_home: Path, *, secrets: bool = True,
     probe = bindir / "hermes-probe-tcc"
     probe.write_text("#!/bin/sh\necho '{}'\n")
     probe.chmod(probe.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+    # Fake `claude` so step_mcp registers into the target's ~/.claude.json
+    # (and never touches the real one). McpCli passes HOME=<tgt> to it.
+    os.environ["HERMES_CLAUDE_BIN"] = write_fake_claude(bindir)
     if secrets:
         (repo / "secrets.env").write_text(f"TELEGRAM_BOT_TOKEN={_TG_TOKEN}\n")
     # minimal permissions.yaml for Layer B
@@ -80,9 +85,15 @@ def test_install_round_trip_and_idempotent():
         # CLAUDE.md is intentionally NOT installed (user-managed).
         assert not (tclaude / "CLAUDE.md").exists()
         assert (tclaude / "skills" / "foo" / "SKILL.md").exists()
-        # settings.json has mcpServers with the RESOLVED token (from secrets.env).
+        # settings.json must NOT carry mcpServers — Claude Code ignores them there.
         settings = json.loads((tclaude / "settings.json").read_text())
-        assert settings["mcpServers"]["tg"]["env"]["TELEGRAM_BOT_TOKEN"] == _TG_TOKEN
+        assert "mcpServers" not in settings, settings
+        # The server is registered where Claude Code actually reads it: user
+        # scope (default) → ~/.claude.json top-level mcpServers, with the token
+        # resolved from secrets.env.
+        claude_json = json.loads((tgt / ".claude.json").read_text())
+        assert "tg" in (claude_json.get("mcpServers") or {}), claude_json
+        assert claude_json["mcpServers"]["tg"]["env"]["TELEGRAM_BOT_TOKEN"] == _TG_TOKEN
         # ~/.hermes created 0700.
         assert (tgt / ".hermes").exists()
         assert oct((tgt / ".hermes").stat().st_mode & 0o777) == "0o700"
@@ -245,6 +256,69 @@ def test_install_confirm_y_writes_overwrite():
         assert before != after, "confirm=y must overwrite"
         # install writes a manifest-derived settings.json with at least permissions.
         assert "permissions" in after
+
+
+def test_install_mcp_registered_not_in_settings_json():
+    """Regression (the bug class): a manifest MCP server must land in a
+    Claude-Code-read location (~/.claude.json), and settings.json must carry
+    NO mcpServers map — Claude Code ignores it there, so writing it is dead."""
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "src"; repo = Path(d) / "repo"; tgt = Path(d) / "tgt"
+        for p in (src, repo, tgt):
+            p.mkdir()
+        _make_source_claude(src)
+        _make_repo(repo, src)
+        os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+        install(config_root=repo, home=tgt, tool_root=repo)
+
+        settings = json.loads((tgt / ".claude" / "settings.json").read_text())
+        assert "mcpServers" not in settings, "MCP must not be written to settings.json"
+
+        claude_json = json.loads((tgt / ".claude.json").read_text())
+        registered = set((claude_json.get("mcpServers") or {}).keys())
+        for proj in (claude_json.get("projects") or {}).values():
+            registered |= set((proj.get("mcpServers") or {}).keys())
+        assert "tg" in registered, claude_json
+
+
+def test_install_mcp_failsoft_without_claude():
+    """No `claude` CLI → registration is skipped (not fatal) and the manual
+    command is surfaced; the rest of the install still completes."""
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "src"; repo = Path(d) / "repo"; tgt = Path(d) / "tgt"
+        for p in (src, repo, tgt):
+            p.mkdir()
+        _make_source_claude(src)
+        _make_repo(repo, src)  # sets HERMES_CLAUDE_BIN to the fake
+        os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+        # Force "claude absent": drop the override AND hide PATH so which() fails.
+        os.environ.pop("HERMES_CLAUDE_BIN", None)
+        saved_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = ""
+        try:
+            result = install(config_root=repo, home=tgt, tool_root=repo)
+        finally:
+            os.environ["PATH"] = saved_path
+        log = "\n".join(result.actions)
+        assert "claude CLI absent" in log, log
+        assert "run manually: claude mcp add" in log, log
+        # rest of install still happened
+        assert (tgt / ".claude" / "skills" / "foo" / "SKILL.md").exists()
+        # fail-soft must NOT leak the secret value into the log
+        assert _TG_TOKEN not in log
+
+
+def test_install_mcp_log_has_no_secret():
+    """step_mcp must never echo env VALUES (e.g. the Telegram token) to the log."""
+    with tempfile.TemporaryDirectory() as d:
+        src = Path(d) / "src"; repo = Path(d) / "repo"; tgt = Path(d) / "tgt"
+        for p in (src, repo, tgt):
+            p.mkdir()
+        _make_source_claude(src)
+        _make_repo(repo, src)
+        os.environ.pop("TELEGRAM_BOT_TOKEN", None)
+        result = install(config_root=repo, home=tgt, tool_root=repo)
+        assert _TG_TOKEN not in "\n".join(result.actions)
 
 
 def _run_standalone() -> int:

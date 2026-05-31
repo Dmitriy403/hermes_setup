@@ -13,7 +13,9 @@ import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from fake_claude import write_fake_claude  # noqa: E402
 from hermes.capture import capture  # noqa: E402
 from hermes.install.installer import install  # noqa: E402
 from hermes.verify import has_drift, verify  # noqa: E402
@@ -47,6 +49,9 @@ def _setup(d: Path):
     probe = bindir / "hermes-probe-tcc"
     probe.write_text("#!/bin/sh\n")
     probe.chmod(probe.stat().st_mode | stat.S_IXUSR)
+    # Fake claude so install registers MCP into <tgt>/.claude.json and verify
+    # finds it there (never touches the real ~/.claude.json).
+    os.environ["HERMES_CLAUDE_BIN"] = write_fake_claude(bindir)
     (repo / "secrets.env").write_text(f"TELEGRAM_BOT_TOKEN={_TG_TOKEN}\n")
     (repo / "manifest" / "permissions.yaml").write_text(
         "schema_version: 1\nsecurity:\n  layer_b:\n    enabled: false\n")
@@ -112,6 +117,38 @@ def test_verify_detects_plugin_version_drift():
         records = verify(config_root=repo, home=tgt, tool_root=repo)
         pl = next(r for r in records if r.component == "plugin" and r.name == "mempalace")
         assert pl.status == "modified", pl
+
+
+def test_verify_mcp_registered_is_match():
+    """After install, the manifest MCP server is registered in ~/.claude.json
+    and verify reports the `mcp` component as match."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        src, repo, tgt = _setup(d)
+        install(config_root=repo, home=tgt, tool_root=repo)
+        records = verify(config_root=repo, home=tgt, tool_root=repo)
+        mc = next(r for r in records if r.component == "mcp" and r.name == "tg")
+        assert mc.status == "match", mc
+
+
+def test_verify_flags_settings_json_only_mcp_as_drift():
+    """Regression (the bug class): a server present ONLY in settings.json's
+    mcpServers map must NOT be treated as registered — Claude Code ignores it
+    there. verify must report the `mcp` component as drift (not match)."""
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        src, repo, tgt = _setup(d)
+        install(config_root=repo, home=tgt, tool_root=repo)
+        # Simulate the old broken state: server only under settings.json, and
+        # NOT in ~/.claude.json.
+        (tgt / ".claude.json").write_text(json.dumps({"mcpServers": {}}))
+        settings_path = tgt / ".claude" / "settings.json"
+        settings = json.loads(settings_path.read_text())
+        settings["mcpServers"] = {"tg": {"command": "tgbot", "args": [], "env": {}}}
+        settings_path.write_text(json.dumps(settings))
+        records = verify(config_root=repo, home=tgt, tool_root=repo)
+        mc = next(r for r in records if r.component == "mcp" and r.name == "tg")
+        assert mc.status != "match", "settings.json-only server must not count as registered"
 
 
 def _run_standalone() -> int:
