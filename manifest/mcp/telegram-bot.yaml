@@ -1,6 +1,9 @@
 name: telegram-bot
 command: hermes-telegram-bot
 args: []
+# local scope: one poller per project session (avoids the Telegram getUpdates
+# 409 that user-scope would cause when several sessions run at once).
+scope: local
 env:
   TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
   TELEGRAM_ALLOWED_CHAT_IDS: ${TELEGRAM_ALLOWED_CHAT_IDS}

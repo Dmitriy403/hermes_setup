@@ -23,6 +23,18 @@ this repo is the public tool only (design Decision 20).
 - Two-repo model: `--manifest-dir` / `HERMES_MANIFEST_DIR` decouple the config
   repo from the tool; `$HOME` paths are templated on capture and expanded on
   install for cross-machine portability.
+- MCP servers are registered via `claude mcp add` (the location Claude Code
+  actually loads: `~/.claude.json` / `.mcp.json`), **not** written into
+  `settings.json`'s `mcpServers` map — which Claude Code ignores, so the old v1
+  approach left every server dead. Non-polling servers default to `user` scope
+  (available everywhere); polling servers (e.g. `telegram-bot`) set
+  `scope: local` in their manifest sidecar to avoid a Telegram `getUpdates` 409
+  from multiple concurrent pollers. Per-server `scope` override; idempotent;
+  fail-soft (surfaces the manual `claude mcp add` command) when `claude` is
+  absent; install strips any stale `mcpServers` left in `settings.json`.
+  `hermes verify` now reports an MCP server that is declared but not registered
+  with Claude Code (e.g. present only under `settings.json`) as drift, instead
+  of `match` based on plugin-package presence alone.
 
 ### Security
 - `hermes capabilities` — show the effective Layer A policy.

@@ -194,6 +194,10 @@ def _registered(config_root: Path, manifest: Manifest) -> list:
 
 
 def _verify_plugin_packages(config_root: Path, manifest: Manifest) -> list[DriftRecord]:
+    """Whether each plugin's console-script is on PATH. This is "the package is
+    installed" — NOT "Claude Code can load the MCP server". MCP-load is checked
+    separately by _verify_mcp; a package can be present while the server is
+    unregistered with Claude Code."""
     records: list[DriftRecord] = []
     for info in _registered(config_root, manifest):
         if not plugins_registry.installable(info):
@@ -203,7 +207,50 @@ def _verify_plugin_packages(config_root: Path, manifest: Manifest) -> list[Drift
             records.append(DriftRecord("plugin-package", info.name, "missing",
                                        f"console-script(s) not on PATH: {', '.join(missing)}"))
         else:
-            records.append(DriftRecord("plugin-package", info.name, "match"))
+            records.append(DriftRecord("plugin-package", info.name, "match",
+                                       "console-script on PATH (see mcp: for load)"))
+    return records
+
+
+def _claude_json_servers(home: Path) -> set[str]:
+    """MCP server names Claude Code would load from ~/.claude.json — top-level
+    `mcpServers` (user scope) plus every `projects[*].mcpServers` (local /
+    project scope). settings.json is intentionally NOT consulted: Claude Code
+    ignores its mcpServers map, so a server living only there is unregistered."""
+    p = home / ".claude.json"
+    if not p.is_file():
+        return set()
+    try:
+        data = json.loads(p.read_text())
+    except (ValueError, OSError):
+        return set()
+    names: set[str] = set((data.get("mcpServers") or {}).keys())
+    for proj in (data.get("projects") or {}).values():
+        if isinstance(proj, dict):
+            names |= set((proj.get("mcpServers") or {}).keys())
+    return names
+
+
+def _verify_mcp(config_root: Path, home: Path, manifest: Manifest) -> list[DriftRecord]:
+    """Each manifest MCP server must be registered where Claude Code reads it
+    (~/.claude.json or a project .mcp.json). A server present only under
+    settings.json's mcpServers map counts as NOT registered → drift."""
+    if not manifest.mcp_servers:
+        return []
+    registered = _claude_json_servers(home)
+    mcp_json = config_root / ".mcp.json"
+    if mcp_json.is_file():
+        try:
+            registered |= set((json.loads(mcp_json.read_text()).get("mcpServers") or {}).keys())
+        except (ValueError, OSError):
+            pass
+    records: list[DriftRecord] = []
+    for s in manifest.mcp_servers:
+        if s.name in registered:
+            records.append(DriftRecord("mcp", s.name, "match"))
+        else:
+            records.append(DriftRecord("mcp", s.name, "missing",
+                                       "not registered with Claude Code (run `hermes install`)"))
     return records
 
 
@@ -273,6 +320,7 @@ def verify(config_root: str | Path | None = None, home: str | Path | None = None
     records += _verify_skills(cfg, claude, manifest)
     records += _verify_plugins(claude, manifest)
     records += _verify_plugin_packages(cfg, manifest)
+    records += _verify_mcp(cfg, home_path, manifest)
     records += _verify_brew_deps(cfg, manifest)
     records += _verify_launchd(cfg, home_path, manifest)
     records += _verify_probe(tool)
