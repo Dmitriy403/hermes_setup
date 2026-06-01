@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import tempfile
+import threading
 from pathlib import Path
 
 from telegram import Bot  # noqa: F401 — import error surfaces as MissingDependency upstream
@@ -15,10 +16,20 @@ from telegram import Bot  # noqa: F401 — import error surfaces as MissingDepen
 
 class PTBClient:
     def __init__(self, token: str):
+        # Dedicated background loop so we can be called from sync OR async
+        # context (FastMCP invokes sync tools inside its own running loop, so
+        # plain asyncio.run blows up with "loop already running"). Pinning all
+        # awaits to one persistent loop also keeps PTB's HTTPx connection pool
+        # bound to a single, always-alive loop across calls.
+        self._loop = asyncio.new_event_loop()
+        self._thread = threading.Thread(
+            target=self._loop.run_forever, daemon=True, name="ptb-client-loop"
+        )
+        self._thread.start()
         self._bot = Bot(token)
 
     def _run(self, coro):
-        return asyncio.run(coro)
+        return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
 
     def download(self, file_id: str) -> str:
         async def _dl() -> str:
